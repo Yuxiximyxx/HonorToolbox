@@ -1,5 +1,7 @@
 package io.github.yuxiximyxx.honortoolbox.navwake.hook
 
+import io.github.yuxiximyxx.honortoolbox.navwake.core.NavChain
+
 import android.content.Context
 import android.content.res.Resources
 import android.os.IBinder

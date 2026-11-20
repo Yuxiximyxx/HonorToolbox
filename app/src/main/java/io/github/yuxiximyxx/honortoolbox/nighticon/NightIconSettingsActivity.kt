@@ -409,7 +409,7 @@ private fun NightIconScreen(
                     }
                     BasicComponent(
                         title = stringResource(R.string.ni_label_status),
-                        rightActions = {
+                        endActions = {
                             Box(
                                 modifier = Modifier
                                     .size(8.dp)
@@ -481,7 +481,7 @@ private fun ThemePickRow(
         title = title,
         summary = current,
         onClick = onClick,
-        rightActions = {
+        endActions = {
             Text(
                 text = stringResource(R.string.ni_pick_action),
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,

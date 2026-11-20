@@ -1,5 +1,7 @@
 package io.github.yuxiximyxx.honortoolbox.navwake.probe
 
+import io.github.yuxiximyxx.honortoolbox.navwake.core.NavChain
+
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings

@@ -1,5 +1,7 @@
 package io.github.yuxiximyxx.honortoolbox.navwake.probe
 
+import io.github.yuxiximyxx.honortoolbox.navwake.core.NavChain
+
 import io.github.yuxiximyxx.honortoolbox.navwake.core.argOrNull
 import io.github.yuxiximyxx.honortoolbox.navwake.core.thisOrNull
 import io.github.yuxiximyxx.honortoolbox.navwake.core.argsArray

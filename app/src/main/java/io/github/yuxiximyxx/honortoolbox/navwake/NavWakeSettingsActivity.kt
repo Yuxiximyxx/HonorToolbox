@@ -36,7 +36,7 @@ import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.icons.useful.Back
+import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -78,7 +78,7 @@ class NavWakeSettingsActivity : ComponentActivity() {
                     title = "长按导航条唤醒",
                     navigationIcon = {
                         IconButton(onClick = onBack) {
-                            Icon(imageVector = MiuixIcons.Useful.Back, contentDescription = "返回")
+                            Icon(imageVector = MiuixIcons.Back, contentDescription = "返回")
                         }
                     }
                 )
@@ -113,8 +113,7 @@ class NavWakeSettingsActivity : ComponentActivity() {
                                 }
                             )
                             BasicComponent(
-                                title = "关闭后完全恢复原 YOYO 行为，可随时打开",
-                                titleColor = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                summary = "关闭后完全恢复原 YOYO 行为，可随时打开"
                             )
                         }
                     }
@@ -136,8 +135,7 @@ class NavWakeSettingsActivity : ComponentActivity() {
                                 }
                             )
                             BasicComponent(
-                                title = "和长按唤醒、上滑回桌面/多任务互不影响；改完立即生效，默认关",
-                                titleColor = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                summary = "和长按唤醒、上滑回桌面/多任务互不影响；改完立即生效，默认关"
                             )
                         }
                     }
@@ -147,14 +145,13 @@ class NavWakeSettingsActivity : ComponentActivity() {
                     Card(modifier = Modifier.padding(horizontal = 12.dp)) {
                         Column {
                             BasicComponent(
-                                title = if (configured.isEmpty()) {
+                                summary = if (configured.isEmpty()) {
                                     "还没选应用"
                                 } else {
                                     "已选 ${configured.size} 个：" +
                                         configured.joinToString("、") { it.displayName } +
                                         if (configured.size > installed.size) "（其中部分未安装）" else ""
-                                },
-                                titleColor = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                }
                             )
                             BasicComponent(
                                 title = "选择应用",
@@ -169,12 +166,11 @@ class NavWakeSettingsActivity : ComponentActivity() {
                     Card(modifier = Modifier.padding(horizontal = 12.dp)) {
                         Column {
                             BasicComponent(
-                                title = if (currentDefault.isEmpty()) {
+                                summary = if (currentDefault.isEmpty()) {
                                     "当前：每次长按都弹选择框"
                                 } else {
                                     "当前：直接打开 ${AppTargets.labelOf(this@NavWakeSettingsActivity, currentDefault)}"
-                                },
-                                titleColor = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                }
                             )
                             installed.forEach { target ->
                                 val isDefault = target.pkg == currentDefault
@@ -200,11 +196,10 @@ class NavWakeSettingsActivity : ComponentActivity() {
                     SmallTitle(text = "拦截的是什么")
                     Card(modifier = Modifier.padding(horizontal = 12.dp)) {
                         BasicComponent(
-                            title = "真机实测：长按导航条时，SystemUI 会调 com.hihonor.magicvoice 的 " +
+                            summary = "真机实测：长按导航条时，SystemUI 会调 com.hihonor.magicvoice 的 " +
                                 "StartAssistantService 拉起 YOYO 的悬浮窗。本功能只在 SystemUI 进程里拦这一条调用，" +
                                 "命中后改为打开你选的应用。任何异常（目标被卸载、选择框起不来、hook 失败）都会放行原行为，" +
-                                "长按绝不会变成死键。锁屏状态下不拦截。",
-                            titleColor = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                "长按绝不会变成死键。锁屏状态下不拦截。"
                         )
                     }
                 }
@@ -226,12 +221,10 @@ class NavWakeSettingsActivity : ComponentActivity() {
                             )
                             BasicComponent(
                                 title = "作用域",
-                                summary = Packages.ALL.joinToString("\n"),
-                                titleColor = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                summary = Packages.ALL.joinToString("\n")
                             )
                             BasicComponent(
-                                title = "日志：/data/adb/lspd/log/modules_*.log（不是 logcat）",
-                                titleColor = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                                summary = "日志：/data/adb/lspd/log/modules_*.log（不是 logcat）"
                             )
                             BasicComponent(
                                 title = "复制日志路径",
@@ -265,7 +258,7 @@ class NavWakeSettingsActivity : ComponentActivity() {
                     title = "选择可唤起的应用",
                     navigationIcon = {
                         IconButton(onClick = onDone) {
-                            Icon(imageVector = MiuixIcons.Useful.Back, contentDescription = "返回")
+                            Icon(imageVector = MiuixIcons.Back, contentDescription = "返回")
                         }
                     }
                 )
@@ -289,8 +282,8 @@ class NavWakeSettingsActivity : ComponentActivity() {
                             summary = app.pkg,
                             endActions = {
                                 Checkbox(
-                                    state = isChecked,
-                                    onStateChange = { v ->
+                                    checked = isChecked,
+                                    onCheckedChange = { v ->
                                         checked = if (v) checked + app.pkg else checked - app.pkg
                                     }
                                 )

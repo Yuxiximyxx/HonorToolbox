@@ -318,7 +318,7 @@ private fun FeatureRow(
         title = title,
         summary = summary,
         onClick = onClick,
-        rightActions = {
+        endActions = {
             Switch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,

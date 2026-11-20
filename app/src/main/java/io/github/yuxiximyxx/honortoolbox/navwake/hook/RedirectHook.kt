@@ -1,5 +1,9 @@
 package io.github.yuxiximyxx.honortoolbox.navwake.hook
 
+import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeHook
+
+import io.github.yuxiximyxx.honortoolbox.navwake.core.NavChain
+
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
