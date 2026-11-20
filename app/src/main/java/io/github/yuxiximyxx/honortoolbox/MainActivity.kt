@@ -61,7 +61,10 @@ import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import top.yukonga.miuix.kmp.extra.SuperArrow
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Refresh
@@ -338,47 +341,73 @@ private fun HomeScreen() {
     // 真机表现为点按钮即退出、菜单根本出不来。miuix 自家的
     // WindowDialog/ListPopup 内部同依赖、同病，换它们没用；
     // 故改用 Material3 AlertDialog 承载（无此依赖），行内容仍
-    // 用 miuix BasicComponent 保持观感，三项执行机制一律未动：
+    // 用 miuix BasicComponent 保持观感，执行机制一律未动：
     // 点按钮只弹窗，点某一项才执行，点外部/返回/取消只关窗。
+    //
+    // v1.0.3 配色对齐（根因）：v1.0.2 的 AlertDialog 没套任何
+    // MaterialTheme（全局只有 MiuixTheme），M3 对话框便恒用
+    // 默认浅色配色、不跟系统夜间；而三行 BasicComponent 按
+    // miuix 主题出字（夜间为浅字），浅字落在浅底上完全看不见
+    // （标题与「取消」借 M3 的内容色出深字，反而可见，真机
+    // 截图实证）。修法：按系统日夜给对话框套同模式的 M3
+    // colorScheme，容器色直接取 miuix 当前主题背景——对话框
+    // 与行组件同源对齐，日间浅底深字、夜间深底浅字。
+    // v1.0.3 另给长按唤醒独立一行：它的 hook 同在 SystemUI
+    // 进程里，执行与「重启系统界面」共用同一条 restart.txt
+    // 机制，只是单列一行让人找得到，不新造通道。
     if (showRestartSheet) {
-        AlertDialog(
-            onDismissRequest = { showRestartSheet = false },
-            title = { Text("重启作用域") },
-            text = {
-                Column {
-                    BasicComponent(
-                        title = "重启系统界面",
-                        summary = "通知中心主题、长按唤醒的改动靠它生效",
-                        onClick = {
-                            showRestartSheet = false
-                            restartSystemUi(context, scope)
-                        },
-                    )
-                    BasicComponent(
-                        title = "重启桌面",
-                        summary = "图标日夜切换的改动靠它生效",
-                        onClick = {
-                            showRestartSheet = false
-                            restartLauncher(context, scope)
-                        },
-                    )
-                    BasicComponent(
-                        title = "强停快服务",
-                        summary = "快服务手势改向首次启用作用域后点它",
-                        onClick = {
-                            showRestartSheet = false
-                            forceStopServiceCenter(context, scope)
-                        },
-                    )
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showRestartSheet = false }) {
-                    Text("取消")
-                }
-            },
-        )
+        val restartDark = isSystemInDarkTheme()
+        MaterialTheme(
+            colorScheme = if (restartDark) darkColorScheme() else lightColorScheme(),
+        ) {
+            AlertDialog(
+                onDismissRequest = { showRestartSheet = false },
+                containerColor = MiuixTheme.colorScheme.background,
+                title = { Text("重启作用域") },
+                text = {
+                    Column {
+                        BasicComponent(
+                            title = "重启系统界面",
+                            summary = "通知中心主题的改动靠它生效",
+                            onClick = {
+                                showRestartSheet = false
+                                restartSystemUi(context, scope)
+                            },
+                        )
+                        BasicComponent(
+                            title = "重启长按导航条唤醒",
+                            summary = "和「重启系统界面」是同一个动作，长按唤醒的开关改动靠它生效",
+                            onClick = {
+                                showRestartSheet = false
+                                restartSystemUi(context, scope)
+                            },
+                        )
+                        BasicComponent(
+                            title = "重启桌面",
+                            summary = "图标日夜切换的改动靠它生效",
+                            onClick = {
+                                showRestartSheet = false
+                                restartLauncher(context, scope)
+                            },
+                        )
+                        BasicComponent(
+                            title = "强停快服务",
+                            summary = "快服务手势改向首次启用作用域后点它",
+                            onClick = {
+                                showRestartSheet = false
+                                forceStopServiceCenter(context, scope)
+                            },
+                        )
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = { showRestartSheet = false }) {
+                        Text("取消")
+                    }
+                },
+            )
+        }
     }
 }
 
