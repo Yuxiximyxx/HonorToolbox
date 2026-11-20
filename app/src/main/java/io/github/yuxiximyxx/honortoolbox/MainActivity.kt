@@ -60,8 +60,9 @@ import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import top.yukonga.miuix.kmp.extra.SuperArrow
-import top.yukonga.miuix.kmp.extra.WindowBottomSheet
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
@@ -325,37 +326,59 @@ private fun HomeScreen() {
 
     // 右上角重启按钮的集合：各宿主的重启/强停动作都收在这里，
     // 各功能页不再各自放按钮（v1.0.1 起集中到首页右上角）。
-    WindowBottomSheet(
-        show = showRestartSheet,
-        title = "重启作用域",
-        onDismissRequest = { showRestartSheet = false },
-    ) {
-        Column {
-            BasicComponent(
-                title = "重启系统界面",
-                summary = "通知中心主题、长按唤醒的改动靠它生效",
-                onClick = {
-                    showRestartSheet = false
-                    restartSystemUi(context, scope)
-                },
-            )
-            BasicComponent(
-                title = "重启桌面",
-                summary = "图标日夜切换的改动靠它生效",
-                onClick = {
-                    showRestartSheet = false
-                    restartLauncher(context, scope)
-                },
-            )
-            BasicComponent(
-                title = "强停快服务",
-                summary = "快服务手势改向首次启用作用域后点它",
-                onClick = {
-                    showRestartSheet = false
-                    forceStopServiceCenter(context, scope)
-                },
-            )
-        }
+    //
+    // v1.0.2 呈现层换实现（根因）：v1.0.1 用 miuix 0.8.8 的
+    // WindowBottomSheet 弹这组菜单，但它的内部实现无条件注册
+    // navigationevent-compose 的 NavigationBackHandler，该组件
+    // 要求宿主提供 NavigationEventDispatcherOwner（组合本地或
+    // 视图树二选一）；本应用 activity-compose 钉在 1.9.2，早于
+    // Navigation Event API、从不提供，miuix 自身也不提供——
+    // show 一置 true、菜单内容开始组合就抛 IllegalStateException
+    // （"No NavigationEventDispatcher was provided…"）闪退，
+    // 真机表现为点按钮即退出、菜单根本出不来。miuix 自家的
+    // WindowDialog/ListPopup 内部同依赖、同病，换它们没用；
+    // 故改用 Material3 AlertDialog 承载（无此依赖），行内容仍
+    // 用 miuix BasicComponent 保持观感，三项执行机制一律未动：
+    // 点按钮只弹窗，点某一项才执行，点外部/返回/取消只关窗。
+    if (showRestartSheet) {
+        AlertDialog(
+            onDismissRequest = { showRestartSheet = false },
+            title = { Text("重启作用域") },
+            text = {
+                Column {
+                    BasicComponent(
+                        title = "重启系统界面",
+                        summary = "通知中心主题、长按唤醒的改动靠它生效",
+                        onClick = {
+                            showRestartSheet = false
+                            restartSystemUi(context, scope)
+                        },
+                    )
+                    BasicComponent(
+                        title = "重启桌面",
+                        summary = "图标日夜切换的改动靠它生效",
+                        onClick = {
+                            showRestartSheet = false
+                            restartLauncher(context, scope)
+                        },
+                    )
+                    BasicComponent(
+                        title = "强停快服务",
+                        summary = "快服务手势改向首次启用作用域后点它",
+                        onClick = {
+                            showRestartSheet = false
+                            forceStopServiceCenter(context, scope)
+                        },
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showRestartSheet = false }) {
+                    Text("取消")
+                }
+            },
+        )
     }
 }
 

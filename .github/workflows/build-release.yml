@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.0.1-release.apk
+          cp "$SRC" dist/HonorToolbox-1.0.2-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.0.1-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.0.2-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,26 +66,23 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.1
-          name: 荣耀工具箱 1.0.1
+          tag_name: v1.0.2
+          name: 荣耀工具箱 1.0.2
           body: |
-            ## 荣耀工具箱 1.0.1（修复版）
+            ## 荣耀工具箱 1.0.2（紧急修复）
 
-            本版只修两件事，功能与设置项不变：
+            本版只修一个故障，功能与设置项不变：
 
-            1. **长按导航条唤醒补齐夜间模式**
-               - 设置页（含选应用页）改走与工具箱其他页面一致的
-                 MIUIX 主题通道，随系统日夜模式切换（此前恒浅色）；
-               - 长按弹出的选择框配色改为随系统切换：日间浅色、
-                 夜间深色（原版只有一套写死的深色）。
+            **修复：首页右上角重启按钮点了就退出、菜单出不来**
+            - 根因：v1.0.1 的「重启作用域」菜单用的 MIUIX 底部
+              弹窗组件，内部依赖宿主提供一个导航事件分发器；
+              工具箱的界面基座版本较旧、从不提供这个分发器，
+              菜单一打开就触发缺失异常、应用直接闪退。
+            - 修法：菜单换成系统对话框承载，三项（重启系统界面 /
+              重启桌面 / 强停快服务）和各自的执行机制原样不动：
+              点按钮只弹窗、不点项不执行任何重启，点外部或
+              「取消」只关窗。
 
-            2. **重启按钮集中到首页右上角**
-               - 首页顶栏右上角新增重启按钮，点开是「重启作用域」
-                 菜单：重启系统界面 / 重启桌面 / 强停快服务
-                 （强停快服务为新增入口，此前只能去系统设置手动强停）；
-               - 各功能页原先散落的重启按钮撤掉，改为一行提示；
-               - 各动作的执行机制与原按钮完全一致，只是换了位置。
-
-            ⚠️ 从 v1.0.0 升级直接覆盖安装即可，配置不用重设。
+            ⚠️ 从 v1.0.1 / v1.0.0 升级直接覆盖安装即可，配置不用重设。
 
           files: dist/*.apk
