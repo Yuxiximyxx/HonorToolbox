@@ -6,8 +6,10 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -35,17 +38,21 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeSettingsActivity
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
+import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeScreen
 import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeStore
+import io.github.yuxiximyxx.honortoolbox.navwake.config.NavConfig
 import io.github.yuxiximyxx.honortoolbox.nighticon.Keys
 import io.github.yuxiximyxx.honortoolbox.nighticon.NightIconConfig
-import io.github.yuxiximyxx.honortoolbox.nighticon.NightIconSettingsActivity
+import io.github.yuxiximyxx.honortoolbox.nighticon.NightIconController
+import io.github.yuxiximyxx.honortoolbox.nighticon.NightIconScreen
 import io.github.yuxiximyxx.honortoolbox.nighticon.NightIconStore
 import io.github.yuxiximyxx.honortoolbox.quickgesture.ConfigWriter
 import io.github.yuxiximyxx.honortoolbox.quickgesture.GestureConfig
-import io.github.yuxiximyxx.honortoolbox.quickgesture.QuickGestureSettingsActivity
-import io.github.yuxiximyxx.honortoolbox.shadeclock.ShadeSettingsActivity
+import io.github.yuxiximyxx.honortoolbox.quickgesture.QuickGestureScreen
+import io.github.yuxiximyxx.honortoolbox.shadeclock.ShadeSettingsScreen
 import io.github.yuxiximyxx.honortoolbox.shadeclock.ThemeStore
+import io.github.yuxiximyxx.honortoolbox.shadeclock.makePrefsReadable
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +60,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.FloatingNavigationBar
+import top.yukonga.miuix.kmp.basic.FloatingNavigationBarDisplayMode
+import top.yukonga.miuix.kmp.basic.FloatingNavigationBarItem
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -60,29 +70,60 @@ import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import top.yukonga.miuix.kmp.extra.SuperArrow
+import top.yukonga.miuix.kmp.extra.WindowBottomSheet
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.All
+import top.yukonga.miuix.kmp.icon.extended.GridView
 import top.yukonga.miuix.kmp.icon.extended.Refresh
+import top.yukonga.miuix.kmp.icon.extended.Theme
+import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
 
 /**
- * 荣耀工具箱首页：按使用场景分组的索引（手势与唤醒 / 通知
- * 中心 / 桌面 / 耳机），不按来源模块组织。每行一个功能：
- * 点行进该功能的设置页，行尾开关是该功能的总开关（与各自
- * 设置页里的开关同一份配置）。第二阶段的功能先占位。
+ * 荣耀工具箱单一宿主（v1.1.0 起）：原先「首页 + 快服务/长按唤醒/
+ * 通知中心/图标四个设置页 + 关于」共六个 Activity 收成一个
+ * Activity 分栏宿主。底部悬浮胶囊栏（miuix 自带
+ * FloatingNavigationBar，毛玻璃与选中药丸高亮都是组件自带）
+ * 四栏：首页（总索引，右上角重启入口在此栏顶栏）/ 手势与唤醒
+ * （快服务手势改向、长按导航条唤醒同栏，栏内先进索引再进各
+ * 自的页，长按的选应用页仍是栏内子页）/ 通知中心（主题设置
+ * 整页，内部二级页结构不变）/ 桌面（图标日夜切换整页）。
+ * 关于不进底栏，仍从首页底部入口进、内容不变。
+ *
+ * 配置绑定迁移（原各设置页 onCreate 里做的事，现统一在宿主
+ * onCreate 做一遍，与逐页打开等价）：
+ * 1. 长按唤醒：NavConfig.bind(镜像偏好) + onChanged 落盘回调
+ *    （原 NavWakeSettingsActivity.onCreate）；
+ * 2. 通知中心主题：makePrefsReadable —— 已有设置文件时先确保
+ *    hook 侧（SystemUI 进程）能读到（原 ShadeSettingsActivity
+ *    .onCreate）；主题戳记的自愈重写仍在通知中心栏组合时由
+ *    ShadeSettingsScreen 自己的 LaunchedEffect 做；
+ * 3. 图标日夜切换：NightIconController 初始化（读镜像偏好、
+ *    推算状态行；原 NightIconSettingsActivity 的 Activity 级
+ *    状态机整体搬进控制器，选主题文件的 startActivityForResult
+ *    结果由本 Activity 的 onActivityResult 转交它）；
+ * 4. 快服务手势改向原本无 onCreate 绑定（组合时读偏好 + 首组
+ *    合落盘自愈），维持原样。
+ * LSPosed 入口不变：MODULE_SETTINGS 与桌面 LAUNCHER 仍都指向
+ * 本 Activity，进来即直达新宿主。
  */
 class MainActivity : ComponentActivity() {
+
+    private val nightIconController by lazy { NightIconController(this) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         @Suppress("DEPRECATION")
         run { window.statusBarColor = 0x00000000 }
+        // 配置绑定迁移（见类注释）：长按唤醒绑定 + 通知中心偏好可读
+        NavConfig.bind(getSharedPreferences(NavConfig.PREFS_NAME, MODE_PRIVATE))
+        NavConfig.onChanged = { NavWakeStore.syncFromPrefs(this) }
+        makePrefsReadable(this)
+        // 图标日夜切换控制器初始化（lazy 首次访问即完成原 onCreate 的状态推算）
+        nightIconController
         setContent {
             val dark = isSystemInDarkTheme()
             val view = LocalView.current
@@ -98,7 +139,187 @@ class MainActivity : ComponentActivity() {
             val controller = remember(dark) {
                 ThemeController(if (dark) ColorSchemeMode.Dark else ColorSchemeMode.Light)
             }
-            MiuixTheme(controller = controller) { HomeScreen() }
+            MiuixTheme(controller = controller) {
+                // v1.1.0 拆地雷（双保险）：miuix 弹层组件
+                // （WindowBottomSheet 等）内部的 NavigationBackHandler
+                // 强制要 NavigationEventDispatcherOwner。activity
+                // 1.12.4 起 ComponentActivity 本身即实现该接口并经
+                // ViewTree 提供；这里再在组合根部显式提供一份
+                // CompositionLocal，保证经 Dialog 承载的底部弹窗
+                // 子组合也能拿到（CompositionLocal 会穿过 Dialog
+                // 子组合继承下去）。
+                CompositionLocalProvider(
+                    LocalNavigationEventDispatcherOwner provides this@MainActivity,
+                ) {
+                    ToolboxHost(nightIconController = nightIconController)
+                }
+            }
+        }
+    }
+
+    @Deprecated("图标日夜切换选主题文件沿用 startActivityForResult，转交控制器处理")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        nightIconController.onActivityResult(requestCode, resultCode, data)
+    }
+}
+
+/** 底栏四栏。 */
+private enum class ToolboxTab { Home, Gesture, Shade, Desktop }
+
+/** 「手势与唤醒」栏内部页：索引 / 快服务手势改向 / 长按导航条唤醒。 */
+private enum class GesturePage { Index, QuickGesture, NavWake }
+
+@Composable
+private fun ToolboxHost(nightIconController: NightIconController) {
+    var tab by remember { mutableStateOf(ToolboxTab.Home) }
+    var gesturePage by remember { mutableStateOf(GesturePage.Index) }
+    var showAbout by remember { mutableStateOf(false) }
+
+    // 关于：首页底部入口进的栏外页（自带顶栏与返回），内容不变。
+    if (showAbout) {
+        BackHandler { showAbout = false }
+        AboutScreen(onBack = { showAbout = false })
+        return
+    }
+
+    Scaffold(
+        containerColor = MiuixTheme.colorScheme.background,
+        bottomBar = {
+            FloatingNavigationBar(
+                mode = FloatingNavigationBarDisplayMode.IconAndText,
+            ) {
+                FloatingNavigationBarItem(
+                    selected = tab == ToolboxTab.Home,
+                    onClick = { tab = ToolboxTab.Home },
+                    icon = MiuixIcons.All,
+                    label = "首页",
+                    modifier = Modifier.weight(1f),
+                )
+                FloatingNavigationBarItem(
+                    selected = tab == ToolboxTab.Gesture,
+                    onClick = { tab = ToolboxTab.Gesture },
+                    icon = MiuixIcons.Tune,
+                    label = "手势与唤醒",
+                    modifier = Modifier.weight(1f),
+                )
+                FloatingNavigationBarItem(
+                    selected = tab == ToolboxTab.Shade,
+                    onClick = { tab = ToolboxTab.Shade },
+                    icon = MiuixIcons.Theme,
+                    label = "通知中心",
+                    modifier = Modifier.weight(1f),
+                )
+                FloatingNavigationBarItem(
+                    selected = tab == ToolboxTab.Desktop,
+                    onClick = { tab = ToolboxTab.Desktop },
+                    icon = MiuixIcons.GridView,
+                    label = "桌面",
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        },
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+        ) {
+            when (tab) {
+                ToolboxTab.Home -> HomeScreen(
+                    onOpenQuickGesture = {
+                        gesturePage = GesturePage.QuickGesture
+                        tab = ToolboxTab.Gesture
+                    },
+                    onOpenNavWake = {
+                        gesturePage = GesturePage.NavWake
+                        tab = ToolboxTab.Gesture
+                    },
+                    onOpenShade = { tab = ToolboxTab.Shade },
+                    onOpenNightIcon = { tab = ToolboxTab.Desktop },
+                    onOpenAbout = { showAbout = true },
+                )
+                ToolboxTab.Gesture -> when (gesturePage) {
+                    GesturePage.Index -> GestureIndexScreen(
+                        onOpenQuickGesture = { gesturePage = GesturePage.QuickGesture },
+                        onOpenNavWake = { gesturePage = GesturePage.NavWake },
+                    )
+                    GesturePage.QuickGesture -> QuickGestureScreen(
+                        onExit = { gesturePage = GesturePage.Index },
+                    )
+                    GesturePage.NavWake -> NavWakeScreen(
+                        onBack = { gesturePage = GesturePage.Index },
+                    )
+                }
+                ToolboxTab.Shade -> ShadeSettingsScreen()
+                ToolboxTab.Desktop -> NightIconScreen(
+                    state = nightIconController.uiState,
+                    onBack = null,
+                    onEnabledChange = { nightIconController.onEnabledChange(it) },
+                    onPickLight = { nightIconController.pick(Keys.Slot.LIGHT) },
+                    onPickDark = { nightIconController.pick(Keys.Slot.DARK) },
+                    onApply = { nightIconController.applyNow() },
+                )
+            }
+        }
+    }
+}
+
+/** 「手势与唤醒」栏索引页：两个功能的入口（开关在各自页里，首页栏也有总开关）。 */
+@Composable
+private fun GestureIndexScreen(
+    onOpenQuickGesture: () -> Unit,
+    onOpenNavWake: () -> Unit,
+) {
+    val context = LocalContext.current
+    val qgSummary = remember {
+        val prefs = context.getSharedPreferences("quickgesture_settings", Context.MODE_PRIVATE)
+        val pkg = prefs.getString("package", "") ?: ""
+        if (pkg.isEmpty()) {
+            "把底角斜滑手势改成打开自选应用"
+        } else {
+            val label = try {
+                val ai = context.packageManager.getApplicationInfo(pkg, 0)
+                context.packageManager.getApplicationLabel(ai).toString()
+            } catch (t: Throwable) {
+                pkg
+            }
+            "当前目标：$label"
+        }
+    }
+    Scaffold(
+        containerColor = MiuixTheme.colorScheme.background,
+        topBar = {
+            SmallTopAppBar(
+                title = "手势与唤醒",
+                color = Color.Transparent,
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp),
+            ) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    SuperArrow(
+                        title = "快服务手势改向",
+                        summary = qgSummary,
+                        onClick = onOpenQuickGesture,
+                    )
+                    SuperArrow(
+                        title = "长按导航条唤醒",
+                        summary = "把长按导航条唤醒 YOYO 改成打开自选应用",
+                        onClick = onOpenNavWake,
+                    )
+                }
+            }
         }
     }
 }
@@ -113,7 +334,13 @@ private data class HomeState(
 )
 
 @Composable
-private fun HomeScreen() {
+private fun HomeScreen(
+    onOpenQuickGesture: () -> Unit,
+    onOpenNavWake: () -> Unit,
+    onOpenShade: () -> Unit,
+    onOpenNightIcon: () -> Unit,
+    onOpenAbout: () -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var state by remember { mutableStateOf(HomeState()) }
@@ -127,7 +354,7 @@ private fun HomeScreen() {
         }
     }
 
-    // 每次回到首页都重读（各设置页可能刚改过）
+    // 每次回到首页都重读（各栏可能刚改过）
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -220,22 +447,14 @@ private fun HomeScreen() {
                         summary = state.quickgestureSummary,
                         checked = state.quickgestureEnabled,
                         onCheckedChange = { setQuickgesture(it) },
-                        onClick = {
-                            context.startActivity(
-                                Intent(context, QuickGestureSettingsActivity::class.java)
-                            )
-                        },
+                        onClick = onOpenQuickGesture,
                     )
                     FeatureRow(
                         title = "长按导航条唤醒",
                         summary = "把长按导航条唤醒 YOYO 改成打开自选应用",
                         checked = state.navwakeEnabled,
                         onCheckedChange = { setNavwake(it) },
-                        onClick = {
-                            context.startActivity(
-                                Intent(context, NavWakeSettingsActivity::class.java)
-                            )
-                        },
+                        onClick = onOpenNavWake,
                     )
                 }
 
@@ -249,11 +468,7 @@ private fun HomeScreen() {
                         summary = "在通知中心顶部渲染锁屏主题样式，也可隐藏运营商文字",
                         checked = state.shadeclockEnabled,
                         onCheckedChange = { setShadeclock(it) },
-                        onClick = {
-                            context.startActivity(
-                                Intent(context, ShadeSettingsActivity::class.java)
-                            )
-                        },
+                        onClick = onOpenShade,
                     )
                 }
 
@@ -267,11 +482,7 @@ private fun HomeScreen() {
                         summary = "桌面图标随系统日夜模式在两套主题之间切换",
                         checked = state.nighticonEnabled,
                         onCheckedChange = { setNighticon(it) },
-                        onClick = {
-                            context.startActivity(
-                                Intent(context, NightIconSettingsActivity::class.java)
-                            )
-                        },
+                        onClick = onOpenNightIcon,
                     )
                     PlaceholderRow(
                         title = "资源库增强",
@@ -318,9 +529,7 @@ private fun HomeScreen() {
                     SuperArrow(
                         title = "关于",
                         summary = "版本 ${BuildConfig.VERSION_NAME} · 来源与致谢",
-                        onClick = {
-                            context.startActivity(Intent(context, AboutActivity::class.java))
-                        },
+                        onClick = onOpenAbout,
                     )
                 }
             }
@@ -330,83 +539,58 @@ private fun HomeScreen() {
     // 右上角重启按钮的集合：各宿主的重启/强停动作都收在这里，
     // 各功能页不再各自放按钮（v1.0.1 起集中到首页右上角）。
     //
-    // v1.0.2 呈现层换实现（根因）：v1.0.1 用 miuix 0.8.8 的
-    // WindowBottomSheet 弹这组菜单，但它的内部实现无条件注册
-    // navigationevent-compose 的 NavigationBackHandler，该组件
-    // 要求宿主提供 NavigationEventDispatcherOwner（组合本地或
-    // 视图树二选一）；本应用 activity-compose 钉在 1.9.2，早于
-    // Navigation Event API、从不提供，miuix 自身也不提供——
-    // show 一置 true、菜单内容开始组合就抛 IllegalStateException
-    // （"No NavigationEventDispatcher was provided…"）闪退，
-    // 真机表现为点按钮即退出、菜单根本出不来。miuix 自家的
-    // WindowDialog/ListPopup 内部同依赖、同病，换它们没用；
-    // 故改用 Material3 AlertDialog 承载（无此依赖），行内容仍
-    // 用 miuix BasicComponent 保持观感，执行机制一律未动：
-    // 点按钮只弹窗，点某一项才执行，点外部/返回/取消只关窗。
-    //
-    // v1.0.3 配色对齐（根因）：v1.0.2 的 AlertDialog 没套任何
-    // MaterialTheme（全局只有 MiuixTheme），M3 对话框便恒用
-    // 默认浅色配色、不跟系统夜间；而三行 BasicComponent 按
-    // miuix 主题出字（夜间为浅字），浅字落在浅底上完全看不见
-    // （标题与「取消」借 M3 的内容色出深字，反而可见，真机
-    // 截图实证）。修法：按系统日夜给对话框套同模式的 M3
-    // colorScheme，容器色直接取 miuix 当前主题背景——对话框
-    // 与行组件同源对齐，日间浅底深字、夜间深底浅字。
-    // v1.0.3 另给长按唤醒独立一行：它的 hook 同在 SystemUI
-    // 进程里，执行与「重启系统界面」共用同一条 restart.txt
-    // 机制，只是单列一行让人找得到，不新造通道。
-    if (showRestartSheet) {
-        val restartDark = isSystemInDarkTheme()
-        MaterialTheme(
-            colorScheme = if (restartDark) darkColorScheme() else lightColorScheme(),
-        ) {
-            AlertDialog(
-                onDismissRequest = { showRestartSheet = false },
-                containerColor = MiuixTheme.colorScheme.background,
-                title = { Text("重启作用域") },
-                text = {
-                    Column {
-                        BasicComponent(
-                            title = "重启系统界面",
-                            summary = "通知中心主题的改动靠它生效",
-                            onClick = {
-                                showRestartSheet = false
-                                restartSystemUi(context, scope)
-                            },
-                        )
-                        BasicComponent(
-                            title = "重启长按导航条唤醒",
-                            summary = "和「重启系统界面」是同一个动作，长按唤醒的开关改动靠它生效",
-                            onClick = {
-                                showRestartSheet = false
-                                restartSystemUi(context, scope)
-                            },
-                        )
-                        BasicComponent(
-                            title = "重启桌面",
-                            summary = "图标日夜切换的改动靠它生效",
-                            onClick = {
-                                showRestartSheet = false
-                                restartLauncher(context, scope)
-                            },
-                        )
-                        BasicComponent(
-                            title = "强停快服务",
-                            summary = "快服务手势改向首次启用作用域后点它",
-                            onClick = {
-                                showRestartSheet = false
-                                forceStopServiceCenter(context, scope)
-                            },
-                        )
-                    }
-                },
-                confirmButton = {},
-                dismissButton = {
-                    TextButton(onClick = { showRestartSheet = false }) {
-                        Text("取消")
-                    }
+    // 呈现史：v1.0.1 初版用 miuix WindowBottomSheet，因宿主缺
+    // NavigationEventDispatcherOwner 一点就闪退；v1.0.2 临时换
+    // Material3 AlertDialog 承载，v1.0.3 又修了它的夜间配色。
+    // v1.1.0 地雷已拆（activity-compose 升 1.12.4 +
+    // CompositionLocal 显式提供 Owner，见 MainActivity 与构建
+    // 脚本注释），本版回归 miuix WindowBottomSheet：底色与行
+    // 文字同出 miuix 主题，日间浅底深字、夜间深底浅字，不会
+    // 再有 v1.0.2 的白底白字。点按钮只弹窗，点某一行才执行，
+    // 点外部/按返回/下滑只关窗；四行文案与执行机制（restart
+    // .txt / root 强停）与 v1.0.3 逐字逐行一致。
+    // 「重启长按导航条唤醒」与「重启系统界面」共用同一条
+    // restart.txt 机制（长按唤醒的 hook 同在 SystemUI 进程），
+    // 单列一行只是让人找得到，不新造通道。
+    WindowBottomSheet(
+        show = showRestartSheet,
+        title = "重启作用域",
+        onDismissRequest = { showRestartSheet = false },
+    ) {
+        Column {
+            BasicComponent(
+                title = "重启系统界面",
+                summary = "通知中心主题的改动靠它生效",
+                onClick = {
+                    showRestartSheet = false
+                    restartSystemUi(context, scope)
                 },
             )
+            BasicComponent(
+                title = "重启长按导航条唤醒",
+                summary = "和「重启系统界面」是同一个动作，长按唤醒的开关改动靠它生效",
+                onClick = {
+                    showRestartSheet = false
+                    restartSystemUi(context, scope)
+                },
+            )
+            BasicComponent(
+                title = "重启桌面",
+                summary = "图标日夜切换的改动靠它生效",
+                onClick = {
+                    showRestartSheet = false
+                    restartLauncher(context, scope)
+                },
+            )
+            BasicComponent(
+                title = "强停快服务",
+                summary = "快服务手势改向首次启用作用域后点它",
+                onClick = {
+                    showRestartSheet = false
+                    forceStopServiceCenter(context, scope)
+                },
+            )
+            Spacer(Modifier.height(12.dp))
         }
     }
 }
@@ -488,7 +672,7 @@ private fun writeLauncherRestartToken(context: Context): Boolean {
     )
 }
 
-/** 功能行：点行进设置页，行尾开关是总开关。 */
+/** 功能行：点行进该功能的栏/页，行尾开关是总开关。 */
 @Composable
 private fun FeatureRow(
     title: String,

@@ -57,15 +57,7 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".shadeclock.ShadeSettingsActivity"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
-            android:exported="false" />
 
-        <activity
-            android:name=".quickgesture.QuickGestureSettingsActivity"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
-            android:exported="false" />
 
         <!-- 长按导航条后弹出的底部选择框。SystemUI 跨包拉起，必须 exported（原 NavWake 同款声明）。 -->
         <activity
@@ -77,20 +69,8 @@
             android:label="长按唤醒谁？"
             android:theme="@style/Theme.HonorToolbox.Chooser" />
 
-        <activity
-            android:name=".navwake.NavWakeSettingsActivity"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
-            android:exported="false" />
 
-        <activity
-            android:name=".nighticon.NightIconSettingsActivity"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
-            android:exported="false" />
 
-        <activity
-            android:name=".AboutActivity"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
-            android:exported="false" />
 
         <!-- Xposed Module 声明（传统 API） -->
         <meta-data

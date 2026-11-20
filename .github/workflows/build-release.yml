@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.0.3-release.apk
+          cp "$SRC" dist/HonorToolbox-1.1.0-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.0.3-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.1.0-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,27 +66,32 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.3
-          name: 荣耀工具箱 1.0.3
+          tag_name: v1.1.0
+          name: 荣耀工具箱 1.1.0
           body: |
-            ## 荣耀工具箱 1.0.3（微修）
+            ## 荣耀工具箱 1.1.0（界面重排）
 
-            本版只修两处，功能与设置项不变：
+            本版只动设置应用的排版，功能、设置项、默认值与生效
+            方式一概不变，覆盖安装即可、配置不用重设。
 
-            **修复 1：重启弹窗在夜间模式下白底白字看不见**
-            - 根因：v1.0.2 的重启弹窗（系统对话框）没跟应用的
-              MIUIX 主题对齐配色——对话框恒是浅色底，里面三行
-              按深色主题出浅字，浅字落浅底上完全看不见。
-            - 修法：弹窗配色改为与应用主题严格一致：日间浅底
-              深字、夜间深底浅字，标题、每行标题与摘要都可读。
+            **单 Activity 四栏 + 悬浮胶囊底栏**
+            - 原先首页与四个功能设置页、关于页共六个独立页面，
+              这次收成一个界面：底部一条悬浮胶囊导航栏（毛玻璃、
+              选中项药丸高亮），四栏为「首页 / 手势与唤醒 /
+              通知中心 / 桌面」。
+            - 首页还是原来的总索引（各功能总开关、右上角重启
+              入口、底部关于入口都在）；「手势与唤醒」栏里是
+              快服务手势改向与长按导航条唤醒两页；「通知中心」
+              栏是主题设置整页（内部二级页不变）；「桌面」栏
+              是图标日夜切换整页（选主题文件流程不变）。
 
-            **补项 2：重启菜单新增「重启长按导航条唤醒」一行**
-            - 长按唤醒的作用域就在系统界面进程里，它的重启
-              本来就是「重启系统界面」那一项，只是原先埋在
-              摘要里不好找；这次单列一行，执行仍是同一个
-              动作、同一条机制。菜单现共四行：重启系统界面 /
-              重启长按导航条唤醒 / 重启桌面 / 强停快服务，
-              点某一行才执行，点外部或「取消」只关窗。
+            **重启菜单回归 MIUIX 底部弹窗**
+            - v1.0.1 那次一点就闪退的根子（系统弹层组件缺一个
+              宿主接口）这次从依赖层彻底拆掉，首页右上角的
+              「重启作用域」菜单回到从底部滑出的 MIUIX 弹窗，
+              四行齐全（重启系统界面 / 重启长按导航条唤醒 /
+              重启桌面 / 强停快服务），日夜模式都可读，点某一
+              行才执行、点外部只关窗。
 
             ⚠️ 从旧版升级直接覆盖安装即可，配置不用重设。
 

@@ -24,8 +24,8 @@ android {
         applicationId = "io.github.yuxiximyxx.honortoolbox"
         minSdk = 34   // Android 14 (MagicOS 8 起，与 MagicPods 一致)
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 5
+        versionName = "1.1.0"
     }
 
     signingConfigs {
@@ -183,7 +183,20 @@ configurations.configureEach {
 dependencies {
     // AndroidX
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.activity:activity-compose:1.9.2")
+    // v1.1.0 拆地雷：miuix 0.8.8 的 WindowBottomSheet/WindowDialog/
+    // ListPopup/SuperBottomSheet/SearchBar 内部都无条件用
+    // navigationevent-compose 的 NavigationBackHandler，强制要求
+    // 宿主提供 NavigationEventDispatcherOwner（v1.0.1 首页重启
+    // 菜单一点就闪退的根因——当时 activity-compose 钉 1.9.2，
+    // ComponentActivity 既不实现该 Owner、也不设 ViewTree 标签）。
+    // activity 1.12 起 ComponentActivity 正式实现
+    // NavigationEventDispatcherOwner 并在 decor view 上设 ViewTree
+    // 标签，activity-compose 1.12.4 配套带 navigationevent-compose
+    // 1.0.2（与 miuix 经 JetBrains 工件在 Android 上解析到的版本
+    // 一致）。宿主侧另在 setContent 根部显式 CompositionLocalProvider
+    // 提供 Owner，双保险覆盖 Dialog 宿主内的弹层组合。
+    implementation("androidx.activity:activity-compose:1.12.4")
+    implementation("androidx.navigationevent:navigationevent-compose:1.0.2")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.5")
 
     // 传统 Xposed API（仅编译期引用，运行时由 LSPosed 提供）

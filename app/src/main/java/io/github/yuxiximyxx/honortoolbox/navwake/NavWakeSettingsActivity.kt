@@ -1,14 +1,9 @@
 package io.github.yuxiximyxx.honortoolbox.navwake
 
-import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,15 +11,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.view.WindowCompat
 import io.github.yuxiximyxx.honortoolbox.navwake.config.AppTargets
 import io.github.yuxiximyxx.honortoolbox.navwake.config.NavConfig
 import io.github.yuxiximyxx.honortoolbox.navwake.config.Packages
@@ -42,9 +35,6 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
@@ -55,38 +45,16 @@ import top.yukonga.miuix.kmp.utils.scrollEndHaptic
  * 启用重定向（默认开）、单击导航条返回（默认关）、可唤起的应用（多选）、
  * 默认目标（点选/清除）、拦截说明、诊断（探针模式/作用域/日志路径/复制）。
  * 写入路径与原版同构：本地镜像 prefs + 同步落盘 navwake.txt（原版是远程 prefs）。
+ *
+ * v1.1.0：原独立 Activity 已并入工具箱单 Activity 宿主，本页
+ * 是「手势与唤醒」栏内的子页（[NavWakeScreen]，选应用页仍是
+ * 页内子页）；原 onCreate 里的 NavConfig.bind(镜像偏好) +
+ * onChanged 落盘回调已迁移到宿主 MainActivity.onCreate，
+ * 宿主启动时即绑定、与逐页打开等价。主题由宿主统一提供。
  */
-class NavWakeSettingsActivity : ComponentActivity() {
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        NavConfig.bind(getSharedPreferences(NavConfig.PREFS_NAME, MODE_PRIVATE))
-        NavConfig.onChanged = { NavWakeStore.syncFromPrefs(this) }
-        @Suppress("DEPRECATION")
-        run { window.statusBarColor = 0x00000000 }
-        setContent {
-            val dark = isSystemInDarkTheme()
-            val view = LocalView.current
-            SideEffect {
-                runCatching {
-                    val act = view.context as? Activity
-                    val w = act?.window ?: return@runCatching
-                    val ctl = WindowCompat.getInsetsController(w, view)
-                    ctl.isAppearanceLightStatusBars = !dark
-                    ctl.isAppearanceLightNavigationBars = !dark
-                }
-            }
-            val controller = remember(dark) {
-                ThemeController(if (dark) ColorSchemeMode.Dark else ColorSchemeMode.Light)
-            }
-            MiuixTheme(controller = controller) {
-                NavWakeSettingsScreen(onBack = { finish() })
-            }
-        }
-    }
-
-    @Composable
-    private fun NavWakeSettingsScreen(onBack: () -> Unit) {
+@Composable
+internal fun NavWakeScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
         var rev by remember { mutableStateOf(0) }
         var picking by remember { mutableStateOf(false) }
         if (picking) {
@@ -108,8 +76,8 @@ class NavWakeSettingsActivity : ComponentActivity() {
             }
         ) { padding ->
             @Suppress("UNUSED_EXPRESSION") rev // 读一次以便状态变更后重组
-            val configured = AppTargets.all(this@NavWakeSettingsActivity)
-            val installed = AppTargets.installed(this@NavWakeSettingsActivity)
+            val configured = AppTargets.all(context)
+            val installed = AppTargets.installed(context)
             val currentDefault = NavConfig.defaultTarget()
             LazyColumn(
                 modifier = Modifier
@@ -195,7 +163,7 @@ class NavWakeSettingsActivity : ComponentActivity() {
                                 summary = if (currentDefault.isEmpty()) {
                                     "当前：每次长按都弹选择框"
                                 } else {
-                                    "当前：直接打开 ${AppTargets.labelOf(this@NavWakeSettingsActivity, currentDefault)}"
+                                    "当前：直接打开 ${AppTargets.labelOf(context, currentDefault)}"
                                 }
                             )
                             installed.forEach { target ->
@@ -256,12 +224,12 @@ class NavWakeSettingsActivity : ComponentActivity() {
                                 title = "复制日志路径",
                                 onClick = {
                                     val clipboard =
-                                        getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                     clipboard.setPrimaryClip(
                                         ClipData.newPlainText("log path", "/data/adb/lspd/log/")
                                     )
                                     Toast.makeText(
-                                        this@NavWakeSettingsActivity, "已复制", Toast.LENGTH_SHORT
+                                        context, "已复制", Toast.LENGTH_SHORT
                                     ).show()
                                 }
                             )
@@ -274,7 +242,8 @@ class NavWakeSettingsActivity : ComponentActivity() {
 
     @Composable
     private fun AppPickerScreen(onDone: () -> Unit) {
-        val apps = remember { AppTargets.launchableApps(this@NavWakeSettingsActivity, packageName) }
+        val context = LocalContext.current
+        val apps = remember { AppTargets.launchableApps(context, context.packageName) }
         var checked by remember {
             mutableStateOf(AppTargets.selectedPackages().toSet())
         }
@@ -326,7 +295,7 @@ class NavWakeSettingsActivity : ComponentActivity() {
                     onClick = {
                         // 保持列表展示顺序（按应用名排序后的顺序）保存
                         val ordered = apps.filter { it.pkg in checked }.map { it.pkg }
-                        AppTargets.saveSelectedPackages(this@NavWakeSettingsActivity, ordered)
+                        AppTargets.saveSelectedPackages(context, ordered)
                         onDone()
                     }
                 ) {
@@ -335,4 +304,3 @@ class NavWakeSettingsActivity : ComponentActivity() {
             }
         }
     }
-}

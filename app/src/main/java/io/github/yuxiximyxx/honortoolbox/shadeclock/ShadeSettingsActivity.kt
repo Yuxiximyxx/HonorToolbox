@@ -1,6 +1,5 @@
 package io.github.yuxiximyxx.honortoolbox.shadeclock
 
-import android.app.Activity
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.ComponentName
@@ -11,14 +10,11 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -31,7 +27,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -47,11 +42,9 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.view.WindowCompat
 import java.io.File
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
@@ -70,9 +63,7 @@ import top.yukonga.miuix.kmp.extra.SuperArrow
 import top.yukonga.miuix.kmp.extra.SuperSwitch
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
 
 /**
  * 设置页（v2.0.3 起）：顶部样式（原系统头部 / 锁屏主题样式）、主题
@@ -98,33 +89,17 @@ import top.yukonga.miuix.kmp.theme.ThemeController
  * （SmallTopAppBar+返回、Card 分组、组件全用 miuix 词汇）。
  * 设置项、存储键、戳记格式一律未动；v2.0.24 的 ui_section_*
  * 展开状态键弃用、打开时清掉。
+ *
+ * 工具箱 v1.1.0：原独立 Activity 已并入工具箱单 Activity 宿主，
+ * 本页是「通知中心」栏整页（[ShadeSettingsScreen]），内部二级
+ * 页结构不变；栏根页不再有返回箭头（原 Activity 时期根页返回
+ * 是 finish）。原 onCreate 里的 makePrefsReadable 已迁移到
+ * 宿主 MainActivity.onCreate（宿主启动时即做）；本页组合时
+ * 的主题迁移/戳记自愈 LaunchedEffect 维持原样（切到本栏即
+ * 组合、等价于原打开设置页）。选主题文件的系统文件选择流程
+ * （rememberLauncherForActivityResult + OpenDocument）不变，
+ * 在宿主 Activity 里照常工作。
  */
-class ShadeSettingsActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        @Suppress("DEPRECATION")
-        run { window.statusBarColor = 0x00000000 }
-        // 已有设置文件时先确保 hook 侧（SystemUI 进程）能读到
-        makePrefsReadable(this)
-        setContent {
-            val dark = isSystemInDarkTheme()
-            val view = LocalView.current
-            SideEffect {
-                runCatching {
-                    val act = view.context as? Activity
-                    val w = act?.window ?: return@runCatching
-                    val ctl = WindowCompat.getInsetsController(w, view)
-                    ctl.isAppearanceLightStatusBars = !dark
-                    ctl.isAppearanceLightNavigationBars = !dark
-                }
-            }
-            val controller = remember(dark) {
-                ThemeController(if (dark) ColorSchemeMode.Dark else ColorSchemeMode.Light)
-            }
-            MiuixTheme(controller = controller) { SettingsScreen() }
-        }
-    }
-}
 
 private const val PREFS_NAME = "settings"
 private const val KEY_CLOCK_SIZE = "clock_size_dp"
@@ -135,7 +110,7 @@ private const val DATE_DP_MIN = 12
 private const val DATE_DP_MAX = 24
 
 // 设置页页面状态（v2.0.25 二级页面）：朴素字符串状态切换，
-// 不引入导航库；系统返回键在子页时先回主页（见 SettingsScreen
+// 不引入导航库；系统返回键在子页时先回主页（见 ShadeSettingsScreen
 // 里的 BackHandler）。
 private const val PAGE_HOME = "home"
 private const val PAGE_THEMES = "themes"
@@ -150,7 +125,7 @@ private const val PAGE_ABOUT = "about"
  * 跨进程直读文件，需要 shared_prefs 目录可穿越、文件可读。尽力而为，
  * 失败时 hook 侧会回退默认值并在日志里写明。
  */
-private fun makePrefsReadable(context: Context) {
+internal fun makePrefsReadable(context: Context) {
     try {
         val dir = File(context.filesDir.parentFile, "shared_prefs")
         dir.setExecutable(true, false)
@@ -178,7 +153,7 @@ private fun BackNavigationIcon(onClick: () -> Unit) {
 }
 
 @Composable
-private fun SettingsScreen() {
+internal fun ShadeSettingsScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val prefs = remember {
@@ -506,12 +481,9 @@ private fun SettingsScreen() {
                 title = pageTitle,
                 color = Color.Transparent,
                 navigationIcon = {
+                    // 栏根页（主页）不放返回箭头；子页返回主页
                     if (page != PAGE_HOME) {
                         BackNavigationIcon { page = PAGE_HOME }
-                    } else {
-                        BackNavigationIcon {
-                            (context as? Activity)?.finish()
-                        }
                     }
                 },
             )

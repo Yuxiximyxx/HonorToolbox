@@ -2,19 +2,13 @@ package io.github.yuxiximyxx.honortoolbox.quickgesture
 
 import io.github.yuxiximyxx.honortoolbox.BuildConfig
 
-import android.app.Activity
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -31,7 +25,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -46,11 +39,9 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.view.WindowCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -66,9 +57,7 @@ import top.yukonga.miuix.kmp.extra.SuperArrow
 import top.yukonga.miuix.kmp.extra.SuperSwitch
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
 
 /**
  * 设置页（MIUIX，v1.0.0）：一页总开关 + 当前目标，选目标走
@@ -82,31 +71,12 @@ import top.yukonga.miuix.kmp.theme.ThemeController
  * 立即双写，hook 侧每次手势命中现读文件，改目标不用强停
  * 快服务、即时生效。写盘失败在页面上明示「同步失败」，
  * 不静默（HonorShadeClock 戳记通道的教训）。
+ *
+ * v1.1.0：原独立 Activity 已并入工具箱单 Activity 宿主，本页
+ * 是「手势与唤醒」栏内的子页（[QuickGestureScreen]），主题与
+ * 状态栏图标明暗由宿主统一提供；本页原本没有 onCreate 级
+ * 配置绑定（组合时读偏好 + 首组合落盘自愈），维持原样。
  */
-class QuickGestureSettingsActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        @Suppress("DEPRECATION")
-        run { window.statusBarColor = 0x00000000 }
-        setContent {
-            val dark = isSystemInDarkTheme()
-            val view = LocalView.current
-            SideEffect {
-                runCatching {
-                    val act = view.context as? Activity
-                    val w = act?.window ?: return@runCatching
-                    val ctl = WindowCompat.getInsetsController(w, view)
-                    ctl.isAppearanceLightStatusBars = !dark
-                    ctl.isAppearanceLightNavigationBars = !dark
-                }
-            }
-            val controller = remember(dark) {
-                ThemeController(if (dark) ColorSchemeMode.Dark else ColorSchemeMode.Light)
-            }
-            MiuixTheme(controller = controller) { SettingsScreen() }
-        }
-    }
-}
 
 private const val PREFS_NAME = "quickgesture_settings"
 private const val KEY_ENABLED = "enabled"
@@ -167,7 +137,7 @@ private fun rememberAppIcon(pkg: String): ImageBitmap? {
 }
 
 @Composable
-private fun SettingsScreen() {
+internal fun QuickGestureScreen(onExit: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val prefs = remember {
@@ -178,6 +148,8 @@ private fun SettingsScreen() {
     BackHandler(enabled = page != PAGE_HOME) {
         page = if (page == PAGE_ACTIVITIES) PAGE_APPS else PAGE_HOME
     }
+    // 栏内子页：主页层级按返回 = 回「手势与唤醒」栏索引
+    BackHandler(enabled = page == PAGE_HOME) { onExit() }
 
     var config by remember {
         mutableStateOf(
@@ -256,9 +228,7 @@ private fun SettingsScreen() {
                             page = if (page == PAGE_ACTIVITIES) PAGE_APPS else PAGE_HOME
                         }
                     } else {
-                        BackNavigationIcon {
-                            (context as? Activity)?.finish()
-                        }
+                        BackNavigationIcon { onExit() }
                     }
                 },
             )
