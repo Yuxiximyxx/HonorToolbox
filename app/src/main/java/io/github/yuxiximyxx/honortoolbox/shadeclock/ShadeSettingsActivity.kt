@@ -83,7 +83,9 @@ import top.yukonga.miuix.kmp.theme.ThemeController
  * 开关（默认开，stamp 第 8 行，锁屏/控制中心/通知中心三处统管）；
  * v2.0.12 加「重启系统界面」按钮（写 restart.txt 请求标记，
  * SystemUI 侧看守读到后结束自己进程被系统拉起，等同强停、
- * 不依赖 root，省得每次验版手动强停）。
+ * 不依赖 root，省得每次验版手动强停）。工具箱 v1.0.1 起该
+ * 按钮撤出本页、集中到工具箱首页右上角的重启菜单（写
+ * restart.txt 的实现不变，仍是 ThemeStore.writeRestartRequest）。
  * 覆盖层相关设置经 stamp.txt（公共 Download 目录）传给 SystemUI
  * 侧，切换免强停；字号仍走 SharedPreferences「settings」，由 hook
  * 侧在 SystemUI 进程启动时经 XSharedPreferences 读取。
@@ -92,7 +94,7 @@ import top.yukonga.miuix.kmp.theme.ThemeController
  * 分组被小乐以「不 miuix、不美观」否决；miuix 0.8.8 本身也
  * 没有官方折叠/可展开分节组件）——主页只留版本说明卡、一列
  * SuperArrow 入口（主题管理/位置/显示与开关/原系统头部/说
- * 明）与常显的「系统界面」（重启按钮），每组点进独立子页
+ * 明）与一行重启提示（按钮在工具箱首页右上角），每组点进独立子页
  * （SmallTopAppBar+返回、Card 分组、组件全用 miuix 词汇）。
  * 设置项、存储键、戳记格式一律未动；v2.0.24 的 ui_section_*
  * 展开状态键弃用、打开时清掉。
@@ -238,7 +240,6 @@ private fun SettingsScreen() {
                 ?: StampStore.DEFAULT_CARD_PROVIDER).substringBefore('/'),
         )
     }
-    var restartStatus by remember { mutableStateOf("") }
     var themes by remember { mutableStateOf(ThemeStore.loadThemes(prefs)) }
     var selectedThemeId by remember {
         mutableStateOf(prefs.getString(ThemeStore.KEY_SELECTED_THEME, "") ?: "")
@@ -469,25 +470,6 @@ private fun SettingsScreen() {
                     is ThemeImporter.Result.Err -> {
                         importStatus = result.message
                     }
-                }
-            }
-        }
-    }
-
-    /**
-     * 「重启系统界面」（v2.0.12）：把请求时刻写进 restart.txt，
-     * SystemUI 侧看守在 1 秒内读到后结束自己进程、被系统拉起，
-     * 模块随之重新加载——等同强停系统界面，不依赖 root。点了
-     * 立即给反馈、不弹确认框：动作只影响系统界面本身、一两秒
-     * 自行恢复，符合少打扰口径。
-     */
-    fun requestRestart() {
-        restartStatus = "已发送重启请求，系统界面马上会重启（通知栏会闪断一两秒）"
-        scope.launch(Dispatchers.IO) {
-            val ok = ThemeStore.writeRestartRequest(context)
-            if (!ok) {
-                withContext(Dispatchers.Main) {
-                    restartStatus = "发送失败，请再点一次"
                 }
             }
         }
@@ -731,7 +713,7 @@ private fun SettingsScreen() {
                                     onCheckedChange = { saveCardMode(it) },
                                 )
                                 Text(
-                                    "放进通知中心的是新建的卡片实例、不是桌面那张的克隆：天气、日历这类绑上就出内容；文字、联系人这类带配置的卡本版只绑不配、显示默认内容。改完开关或选完卡，下拉一次通知中心即生效（不行就用「重启系统界面」）。高度特别大的卡会把通知挤下去很多，选卡时留意尺寸。",
+                                    "放进通知中心的是新建的卡片实例、不是桌面那张的克隆：天气、日历这类绑上就出内容；文字、联系人这类带配置的卡本版只绑不配、显示默认内容。改完开关或选完卡，下拉一次通知中心即生效（不行就回工具箱首页、用右上角重启菜单里的「重启系统界面」）。高度特别大的卡会把通知挤下去很多，选卡时留意尺寸。",
                                     fontSize = 13.sp,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                     modifier = Modifier.padding(vertical = 8.dp),
@@ -932,7 +914,7 @@ private fun SettingsScreen() {
                                     modifier = Modifier.padding(top = 12.dp),
                                 )
                                 Text(
-                                    "字号只对原系统头部模式有效，改完回主页点「重启系统界面」即可生效。",
+                                    "字号只对原系统头部模式有效，改完回工具箱首页、点右上角重启菜单里的「重启系统界面」即可生效。",
                                     fontSize = 13.sp,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                     modifier = Modifier.padding(top = 8.dp),
@@ -954,7 +936,7 @@ private fun SettingsScreen() {
                                     color = MiuixTheme.colorScheme.onSurface,
                                 )
                                 Text(
-                                    "字号滑杆只对原系统头部模式有效，改完点主页「重启系统界面」即可生效（等同强停，不用重启手机）。",
+                                    "字号滑杆只对原系统头部模式有效，改完回工具箱首页、点右上角重启菜单里的「重启系统界面」即可生效（等同强停，不用重启手机）。",
                                     fontSize = 14.sp,
                                     color = MiuixTheme.colorScheme.onSurface,
                                     modifier = Modifier.padding(top = 8.dp),
@@ -977,8 +959,8 @@ private fun SettingsScreen() {
 
                     else -> {
                         // 主页：版本说明卡 + SuperArrow 入口列 +
-                        // 常显的系统界面（重启按钮，动作行不藏进
-                        // 子页）。
+                        // 一行重启提示（按钮已集中到工具箱首页
+                        // 右上角，v1.0.1）。
                         SmallTitle(
                             text = "主题时钟",
                             insideMargin = PaddingValues(start = 4.dp),
@@ -1050,31 +1032,12 @@ private fun SettingsScreen() {
                                 )
                             }
                         }
-                        SmallTitle(
-                            text = "系统界面",
-                            insideMargin = PaddingValues(start = 4.dp, top = 16.dp),
+                        Text(
+                            "需要重启系统界面时（比如改了原头部字号），回工具箱首页、点右上角的重启按钮，选「重启系统界面」。",
+                            fontSize = 13.sp,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            modifier = Modifier.padding(start = 4.dp, top = 16.dp, end = 4.dp),
                         )
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            cornerRadius = 20.dp,
-                            insideMargin = PaddingValues(vertical = 4.dp),
-                        ) {
-                            Column {
-                                SuperArrow(
-                                    title = "重启系统界面",
-                                    summary = "等同强停系统界面：字号等需要重载的改动点它即可生效，不用去设置里强停",
-                                    onClick = { requestRestart() },
-                                )
-                                if (restartStatus.isNotEmpty()) {
-                                    Text(
-                                        restartStatus,
-                                        fontSize = 13.sp,
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                                    )
-                                }
-                            }
-                        }
                     }
                 }
             }

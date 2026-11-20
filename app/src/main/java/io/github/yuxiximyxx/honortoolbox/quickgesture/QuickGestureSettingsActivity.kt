@@ -419,7 +419,7 @@ private fun HomePage(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     "1. 在荣耀快服务里打开「荣耀快服务快捷手势」（快服务的设置 → 手势设置）。\n" +
-                        "2. 在 LSPosed 里给荣耀工具箱勾选「荣耀快服务」作用域，并强停一次快服务。\n" +
+                        "2. 在 LSPosed 里给荣耀工具箱勾选「荣耀快服务」作用域；然后回工具箱首页、点右上角重启菜单里的「强停快服务」让它生效。\n" +
                         "3. 在这里打开改向开关、选好目标。改目标即时生效，不用重启。",
                     fontSize = 13.sp,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),

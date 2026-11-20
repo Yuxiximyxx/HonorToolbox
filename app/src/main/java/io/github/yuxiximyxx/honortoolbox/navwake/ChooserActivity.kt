@@ -25,6 +25,10 @@ import io.github.yuxiximyxx.honortoolbox.navwake.config.NavConfig
  * - `excludeFromRecents` + `noHistory`，不污染任务列表。
  *
  * 点谁开谁；勾了「设为默认」就记住，下次直达。
+ *
+ * 配色走 nw_* 资源：日间浅色（values）、夜间深色（values-night，
+ * 即原 NavWake 的那套），随系统日夜模式切换（v1.0.1 补齐；原版
+ * 只有写死的一套深色、不跟系统）。
  */
 class ChooserActivity : Activity() {
 

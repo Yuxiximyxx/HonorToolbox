@@ -13,11 +13,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -46,7 +44,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import io.github.yuxiximyxx.honortoolbox.R
 import java.io.File
-import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Button
@@ -80,7 +77,8 @@ data class NightIconUiState(
 /**
  * 「桌面 · 图标日夜切换」设置页（原 NightIcon 设置页的功能项
  * 按工具箱统一 MIUIX 呈现重排，设置项/默认值不变）：
- * 总开关、白天/夜间主题选择、状态、立即应用、重启桌面。
+ * 总开关、白天/夜间主题选择、状态、立即应用（「重启桌面」
+ * 自工具箱 v1.0.1 起集中到工具箱首页右上角，本页只留提示）。
  * 与原版的差别只在通道：下发由 libxposed 远程偏好/远程文件
  * 改为落盘 /sdcard/Download/HonorToolbox/nighticon/（见
  * [NightIconStore]）；本地展示镜像偏好改名 nighticon_settings
@@ -139,7 +137,6 @@ class NightIconSettingsActivity : ComponentActivity() {
                     onPickLight = { pick(Keys.Slot.LIGHT) },
                     onPickDark = { pick(Keys.Slot.DARK) },
                     onApply = { applyNow() },
-                    onRestart = { restartLauncher() },
                 )
             }
         }
@@ -266,35 +263,9 @@ class NightIconSettingsActivity : ComponentActivity() {
         }
     }
 
-    // ---------------- 重启桌面 ----------------
-    /**
-     * 首选 root：`am force-stop` 不依赖 Hook 是否生效，桌面卡死/Hook 失败时也能用；系统会自动拉起默认桌面。
-     * 无 root（或未授权）时兜底：写落盘配置的 restart_token，由桌面进程复查到后 killProcess 自身。
-     */
-    private fun restartLauncher() {
-        thread(name = "nighticon-restart") {
-            val rootOk = runCatching {
-                val p = ProcessBuilder("su", "-c", "am force-stop com.hihonor.android.launcher")
-                    .redirectErrorStream(true).start()
-                p.waitFor(10, TimeUnit.SECONDS) && p.exitValue() == 0
-            }.getOrDefault(false)
-            val msg = when {
-                rootOk -> R.string.ni_toast_restart_root
-                writeRestartToken() -> R.string.ni_toast_restart_hook
-                else -> R.string.ni_toast_restart_fail
-            }
-            Log.i(TAG, "重启桌面：root=$rootOk")
-            runOnUiThread { Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }
-        }
-    }
-
-    private fun writeRestartToken(): Boolean {
-        val cur = NightIconStore.readState(this) ?: stateFromMirror()
-        return NightIconStore.writeConfig(
-            this,
-            cur.copy(restartToken = System.currentTimeMillis()),
-        )
-    }
+    // 「重启桌面」按钮自工具箱 v1.0.1 起撤出本页、集中到工具箱
+    // 首页右上角的重启菜单（实现搬到 MainActivity，同机制：root
+    // 强停优先、无 root 写 restart_token 兜底）。
 
     /** 落盘配置还不存在时，用本地镜像拼一份（版本号以已下发为准，未下发记 0）。 */
     private fun stateFromMirror(): NightIconConfig.State = NightIconConfig.State(
@@ -344,7 +315,6 @@ private fun NightIconScreen(
     onPickLight: () -> Unit,
     onPickDark: () -> Unit,
     onApply: () -> Unit,
-    onRestart: () -> Unit,
 ) {
     Scaffold(
         containerColor = MiuixTheme.colorScheme.background,
@@ -428,44 +398,29 @@ private fun NightIconScreen(
                     )
                 }
 
-                Row(
+                Button(
+                    onClick = onApply,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 18.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        .padding(top = 18.dp)
+                        .height(52.dp),
+                    cornerRadius = 16.dp,
+                    minHeight = 52.dp,
+                    colors = ButtonDefaults.buttonColorsPrimary(),
                 ) {
-                    Button(
-                        onClick = onApply,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(52.dp),
-                        cornerRadius = 16.dp,
-                        minHeight = 52.dp,
-                        colors = ButtonDefaults.buttonColorsPrimary(),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.ni_btn_apply),
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    }
-                    Button(
-                        onClick = onRestart,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(52.dp),
-                        cornerRadius = 16.dp,
-                        minHeight = 52.dp,
-                        colors = ButtonDefaults.buttonColors(),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.ni_btn_restart),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    }
+                    Text(
+                        text = stringResource(R.string.ni_btn_apply),
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
                 }
+                Text(
+                    text = "需要重启桌面时，回工具箱首页、点右上角的重启按钮，选「重启桌面」。",
+                    fontSize = 13.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.padding(start = 4.dp, top = 12.dp, end = 4.dp),
+                )
             }
         }
     }

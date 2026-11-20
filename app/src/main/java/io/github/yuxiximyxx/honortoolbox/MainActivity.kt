@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -36,6 +37,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeSettingsActivity
 import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeStore
+import io.github.yuxiximyxx.honortoolbox.nighticon.Keys
 import io.github.yuxiximyxx.honortoolbox.nighticon.NightIconConfig
 import io.github.yuxiximyxx.honortoolbox.nighticon.NightIconSettingsActivity
 import io.github.yuxiximyxx.honortoolbox.nighticon.NightIconStore
@@ -43,17 +45,25 @@ import io.github.yuxiximyxx.honortoolbox.quickgesture.ConfigWriter
 import io.github.yuxiximyxx.honortoolbox.quickgesture.GestureConfig
 import io.github.yuxiximyxx.honortoolbox.quickgesture.QuickGestureSettingsActivity
 import io.github.yuxiximyxx.honortoolbox.shadeclock.ShadeSettingsActivity
+import io.github.yuxiximyxx.honortoolbox.shadeclock.ThemeStore
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.extra.SuperArrow
+import top.yukonga.miuix.kmp.extra.WindowBottomSheet
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
@@ -104,6 +114,7 @@ private fun HomeScreen() {
     val scope = rememberCoroutineScope()
     var state by remember { mutableStateOf(HomeState()) }
     var syncHint by remember { mutableStateOf<String?>(null) }
+    var showRestartSheet by remember { mutableStateOf(false) }
 
     fun refresh() {
         scope.launch {
@@ -173,6 +184,14 @@ private fun HomeScreen() {
             SmallTopAppBar(
                 title = "荣耀工具箱",
                 color = Color.Transparent,
+                actions = {
+                    IconButton(onClick = { showRestartSheet = true }) {
+                        Icon(
+                            imageVector = MiuixIcons.Refresh,
+                            contentDescription = "重启作用域",
+                        )
+                    }
+                },
             )
         },
     ) { innerPadding ->
@@ -303,6 +322,118 @@ private fun HomeScreen() {
             }
         }
     }
+
+    // 右上角重启按钮的集合：各宿主的重启/强停动作都收在这里，
+    // 各功能页不再各自放按钮（v1.0.1 起集中到首页右上角）。
+    WindowBottomSheet(
+        show = showRestartSheet,
+        title = "重启作用域",
+        onDismissRequest = { showRestartSheet = false },
+    ) {
+        Column {
+            BasicComponent(
+                title = "重启系统界面",
+                summary = "通知中心主题、长按唤醒的改动靠它生效",
+                onClick = {
+                    showRestartSheet = false
+                    restartSystemUi(context, scope)
+                },
+            )
+            BasicComponent(
+                title = "重启桌面",
+                summary = "图标日夜切换的改动靠它生效",
+                onClick = {
+                    showRestartSheet = false
+                    restartLauncher(context, scope)
+                },
+            )
+            BasicComponent(
+                title = "强停快服务",
+                summary = "快服务手势改向首次启用作用域后点它",
+                onClick = {
+                    showRestartSheet = false
+                    forceStopServiceCenter(context, scope)
+                },
+            )
+        }
+    }
+}
+
+/**
+ * 「重启系统界面」：沿用通知中心主题原按钮的实现——写 restart.txt
+ * 请求标记，SystemUI 侧看守读到后结束自己进程被系统拉起（等同
+ * 强停、不依赖 root）。长按唤醒的总开关改动也靠它生效。
+ */
+private fun restartSystemUi(context: Context, scope: CoroutineScope) {
+    scope.launch {
+        val ok = withContext(Dispatchers.IO) { ThemeStore.writeRestartRequest(context) }
+        Toast.makeText(
+            context,
+            if (ok) "已发送重启请求，系统界面马上会重启" else "发送失败，请再试一次",
+            Toast.LENGTH_SHORT,
+        ).show()
+    }
+}
+
+/**
+ * 「重启桌面」：与图标日夜切换页原按钮同机制——首选 root
+ * `am force-stop`，无 root 时兜底写落盘配置的 restart_token，
+ * 由桌面进程复查到后结束自身。
+ */
+private fun restartLauncher(context: Context, scope: CoroutineScope) {
+    scope.launch(Dispatchers.IO) {
+        val rootOk = forceStopViaRoot("com.hihonor.android.launcher")
+        val msg = when {
+            rootOk -> "已重启桌面"
+            writeLauncherRestartToken(context) -> "已发送重启桌面的请求"
+            else -> "重启桌面失败，请到系统设置里强停桌面"
+        }
+        withContext(Dispatchers.Main) {
+            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+        }
+    }
+}
+
+/**
+ * 「强停快服务」（v1.0.1 新增入口）：快服务手势改向的宿主进程
+ * 没有重启令牌通道，机制与「重启桌面」的 root 强停同款；root
+ * 不可用时只能提示去系统设置里手动强停。
+ */
+private fun forceStopServiceCenter(context: Context, scope: CoroutineScope) {
+    scope.launch(Dispatchers.IO) {
+        val rootOk = forceStopViaRoot("com.hihonor.servicecenter")
+        withContext(Dispatchers.Main) {
+            Toast.makeText(
+                context,
+                if (rootOk) "已强停快服务" else "强停失败，请到系统设置里手动强停快服务",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+}
+
+private fun forceStopViaRoot(pkg: String): Boolean = runCatching {
+    val p = ProcessBuilder("su", "-c", "am force-stop $pkg")
+        .redirectErrorStream(true).start()
+    p.waitFor(10, TimeUnit.SECONDS) && p.exitValue() == 0
+}.getOrDefault(false)
+
+/** 桌面重启兜底令牌（与图标日夜切换页原 writeRestartToken 同口径）。 */
+private fun writeLauncherRestartToken(context: Context): Boolean {
+    val cur = NightIconStore.readState(context) ?: run {
+        val mirror = context.getSharedPreferences("nighticon_settings", Context.MODE_PRIVATE)
+        NightIconConfig.State(
+            enabled = mirror.getBoolean(Keys.ENABLED, false),
+            lightVersion = mirror.getLong("${Keys.Slot.LIGHT.id}_pushed_version", 0),
+            darkVersion = mirror.getLong("${Keys.Slot.DARK.id}_pushed_version", 0),
+            lightHasBackup = mirror.getBoolean(Keys.hasBackupKey(Keys.Slot.LIGHT), false),
+            darkHasBackup = mirror.getBoolean(Keys.hasBackupKey(Keys.Slot.DARK), false),
+        )
+    }
+    return NightIconStore.writeConfig(
+        context,
+        cur.copy(restartToken = System.currentTimeMillis()),
+    )
 }
 
 /** 功能行：点行进设置页，行尾开关是总开关。 */

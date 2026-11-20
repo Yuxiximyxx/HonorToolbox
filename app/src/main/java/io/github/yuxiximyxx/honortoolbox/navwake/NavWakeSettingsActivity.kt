@@ -1,5 +1,6 @@
 package io.github.yuxiximyxx.honortoolbox.navwake
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -7,6 +8,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,12 +16,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
 import io.github.yuxiximyxx.honortoolbox.navwake.config.AppTargets
 import io.github.yuxiximyxx.honortoolbox.navwake.config.NavConfig
 import io.github.yuxiximyxx.honortoolbox.navwake.config.Packages
@@ -37,7 +42,9 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.theme.ThemeController
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
@@ -55,8 +62,24 @@ class NavWakeSettingsActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         NavConfig.bind(getSharedPreferences(NavConfig.PREFS_NAME, MODE_PRIVATE))
         NavConfig.onChanged = { NavWakeStore.syncFromPrefs(this) }
+        @Suppress("DEPRECATION")
+        run { window.statusBarColor = 0x00000000 }
         setContent {
-            MiuixTheme {
+            val dark = isSystemInDarkTheme()
+            val view = LocalView.current
+            SideEffect {
+                runCatching {
+                    val act = view.context as? Activity
+                    val w = act?.window ?: return@runCatching
+                    val ctl = WindowCompat.getInsetsController(w, view)
+                    ctl.isAppearanceLightStatusBars = !dark
+                    ctl.isAppearanceLightNavigationBars = !dark
+                }
+            }
+            val controller = remember(dark) {
+                ThemeController(if (dark) ColorSchemeMode.Dark else ColorSchemeMode.Light)
+            }
+            MiuixTheme(controller = controller) {
                 NavWakeSettingsScreen(onBack = { finish() })
             }
         }
@@ -114,6 +137,9 @@ class NavWakeSettingsActivity : ComponentActivity() {
                             )
                             BasicComponent(
                                 summary = "关闭后完全恢复原 YOYO 行为，可随时打开"
+                            )
+                            BasicComponent(
+                                summary = "改完这个开关，要回工具箱首页点右上角的重启按钮、选「重启系统界面」才会生效"
                             )
                         }
                     }

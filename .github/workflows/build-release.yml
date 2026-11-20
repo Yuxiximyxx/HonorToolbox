@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.0.0-release.apk
+          cp "$SRC" dist/HonorToolbox-1.0.1-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.0.0-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.0.1-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,28 +66,26 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
-          name: 荣耀工具箱 1.0.0
+          tag_name: v1.0.1
+          name: 荣耀工具箱 1.0.1
           body: |
-            ## 荣耀工具箱 1.0.0（第一阶段）
+            ## 荣耀工具箱 1.0.1（修复版）
 
-            把原先分散的几个荣耀 LSPosed 小模块合成一个：设置按使用场景分组，
-            全部功能可以单独开关，关掉后对应系统行为与没装一样。
+            本版只修两件事，功能与设置项不变：
 
-            本版包含 4 个功能：
-            - 手势与唤醒：快服务手势改向（底角斜滑改为打开自选应用）、
-              长按导航条唤醒（长按导航条改为打开自选应用，另含单击导航条返回）
-            - 通知中心：通知中心主题（渲染锁屏主题时钟样式、运营商文字隐藏等）
-            - 桌面：图标日夜切换（桌面图标随深浅色模式切换主题图标版本）
+            1. **长按导航条唤醒补齐夜间模式**
+               - 设置页（含选应用页）改走与工具箱其他页面一致的
+                 MIUIX 主题通道，随系统日夜模式切换（此前恒浅色）；
+               - 长按弹出的选择框配色改为随系统切换：日间浅色、
+                 夜间深色（原版只有一套写死的深色）。
 
-            资源库增强与两个耳机功能（Free4 / XM4）将在第二阶段合入，
-            设置里已留好分组位置。
+            2. **重启按钮集中到首页右上角**
+               - 首页顶栏右上角新增重启按钮，点开是「重启作用域」
+                 菜单：重启系统界面 / 重启桌面 / 强停快服务
+                 （强停快服务为新增入口，此前只能去系统设置手动强停）；
+               - 各功能页原先散落的重启按钮撤掉，改为一行提示；
+               - 各动作的执行机制与原按钮完全一致，只是换了位置。
 
-            ⚠️ 安装前请注意：
-            1. 装本模块后，请在 LSPosed 里**停用或卸载旧的同名模块**
-               （通知中心主题、快服务手势改向、长按导航条唤醒、图标日夜切换），
-               避免双重 hook；
-            2. LSPosed 作用域只勾「荣耀工具箱」一个模块的全部作用域；
-            3. 各功能的旧配置不会自动迁移，需要在工具箱里重新设置一遍
-               （配置统一落在 Download/HonorToolbox/ 目录）。
+            ⚠️ 从 v1.0.0 升级直接覆盖安装即可，配置不用重设。
+
           files: dist/*.apk
