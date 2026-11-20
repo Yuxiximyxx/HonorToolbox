@@ -1,5 +1,6 @@
 package io.github.yuxiximyxx.honortoolbox.nighticon
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -76,7 +77,7 @@ class NightIconController(private val activity: ComponentActivity) {
 
     /** 宿主 onActivityResult 转交（原 Activity 的同名回调，逻辑不变）。 */
     fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (resultCode != ComponentActivity.RESULT_OK) return
+        if (resultCode != Activity.RESULT_OK) return
         val uri = data?.data ?: return
         val slot = Keys.Slot.entries.getOrNull(requestCode) ?: return
         val name = displayName(uri)

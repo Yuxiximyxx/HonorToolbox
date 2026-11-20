@@ -194,28 +194,24 @@ private fun ToolboxHost(nightIconController: NightIconController) {
                     onClick = { tab = ToolboxTab.Home },
                     icon = MiuixIcons.All,
                     label = "首页",
-                    modifier = Modifier.weight(1f),
                 )
                 FloatingNavigationBarItem(
                     selected = tab == ToolboxTab.Gesture,
                     onClick = { tab = ToolboxTab.Gesture },
                     icon = MiuixIcons.Tune,
                     label = "手势与唤醒",
-                    modifier = Modifier.weight(1f),
                 )
                 FloatingNavigationBarItem(
                     selected = tab == ToolboxTab.Shade,
                     onClick = { tab = ToolboxTab.Shade },
                     icon = MiuixIcons.Theme,
                     label = "通知中心",
-                    modifier = Modifier.weight(1f),
                 )
                 FloatingNavigationBarItem(
                     selected = tab == ToolboxTab.Desktop,
                     onClick = { tab = ToolboxTab.Desktop },
                     icon = MiuixIcons.GridView,
                     label = "桌面",
-                    modifier = Modifier.weight(1f),
                 )
             }
         },
