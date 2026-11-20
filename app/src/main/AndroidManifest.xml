@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 包可见性（合并自各功能原声明，取并集）：
+         1. 选卡枚举（通知中心头部卡片）：十个服务卡片来源包 + APPWIDGET_UPDATE 意图；
+         2. 选目标应用（手势改向 / 导航条唤醒）：MAIN / MAIN+LAUNCHER 意图查询，
+            不申请 QUERY_ALL_PACKAGES。 -->
+    <queries>
+        <package android:name="com.hihonor.magicvoice" />
+        <package android:name="com.hihonor.brain" />
+        <package android:name="com.android.systemui" />
+        <package android:name="com.hihonor.systemui" />
+        <intent>
+            <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        </intent>
+        <package android:name="com.hihonor.android.totemweather" />
+        <package android:name="com.hihonor.calendar" />
+        <package android:name="com.hihonor.deskclock" />
+        <package android:name="com.hihonor.contacts" />
+        <package android:name="com.hihonor.photos" />
+        <package android:name="com.hihonor.wallet" />
+        <package android:name="com.hihonor.magichome" />
+        <package android:name="com.hihonor.parentcontrol" />
+        <package android:name="com.hihonor.android.launcher" />
+        <package android:name="com.hihonor.notepad" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+        </intent>
+    </queries>
+
+    <application
+        android:label="@string/app_name"
+        android:description="@string/app_subtitle"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:extractNativeLibs="false"
+        android:enableOnBackInvokedCallback="false"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.HonorToolbox">
+
+        <activity
+            android:name=".MainActivity"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="de.robv.android.xposed.category.MODULE_SETTINGS" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".shadeclock.ShadeSettingsActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
+            android:exported="false" />
+
+        <activity
+            android:name=".quickgesture.QuickGestureSettingsActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
+            android:exported="false" />
+
+        <!-- 长按导航条后弹出的底部选择框。SystemUI 跨包拉起，必须 exported（原 NavWake 同款声明）。 -->
+        <activity
+            android:name=".navwake.ChooserActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:label="长按唤醒谁？"
+            android:theme="@style/Theme.HonorToolbox.Chooser" />
+
+        <activity
+            android:name=".navwake.NavWakeSettingsActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
+            android:exported="false" />
+
+        <activity
+            android:name=".nighticon.NightIconSettingsActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
+            android:exported="false" />
+
+        <activity
+            android:name=".AboutActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
+            android:exported="false" />
+
+        <!-- Xposed Module 声明（传统 API） -->
+        <meta-data
+            android:name="xposedmodule"
+            android:value="true" />
+        <meta-data
+            android:name="xposeddescription"
+            android:value="荣耀工具箱：MagicOS 功能合集——快服务手势改向、长按导航条唤醒改向、通知中心主题（锁屏主题样式渲染）、桌面图标随日夜切换。" />
+        <meta-data
+            android:name="xposedminversion"
+            android:value="82" />
+        <meta-data
+            android:name="xposedscope"
+            android:resource="@array/xposedscope" />
+    </application>
+
+</manifest>

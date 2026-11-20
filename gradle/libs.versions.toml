@@ -1,0 +1,33 @@
+[versions]
+agp = "9.1.1"
+kotlin = "2.4.10"
+coreKtx = "1.13.1"
+activityCompose = "1.9.2"
+lifecycleRuntimeKtx = "2.8.5"
+composeBom = "2026.05.00"
+composeUi = "1.10.4"
+composeFoundation = "1.10.4"
+composeUiToolingPreview = "1.10.4"
+composeUiTooling = "1.10.4"
+composeMaterial3 = "1.4.0"
+miuix = "0.8.8"
+xposedApi = "82"
+
+[libraries]
+core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
+activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
+lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
+compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
+compose-ui = { module = "androidx.compose.ui:ui", version.ref = "composeUi" }
+compose-foundation = { module = "androidx.compose.foundation:foundation", version.ref = "composeFoundation" }
+compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview", version.ref = "composeUiToolingPreview" }
+compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling", version.ref = "composeUiTooling" }
+compose-material3 = { module = "androidx.compose.material3:material3", version.ref = "composeMaterial3" }
+miuix = { module = "top.yukonga.miuix.kmp:miuix", version.ref = "miuix" }
+miuix-icons = { module = "top.yukonga.miuix.kmp:miuix-icons", version.ref = "miuix" }
+xposed-api = { module = "de.robv.android.xposed:api", version.ref = "xposedApi" }
+
+[plugins]
+agp-app = { id = "com.android.application", version.ref = "agp" }
+kotlin = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

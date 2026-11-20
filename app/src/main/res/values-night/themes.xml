@@ -1,0 +1,8 @@
+<resources>
+    <!-- 深色模式窗口背景，避免浅色窗口背景在深色下闪白 -->
+    <style name="Theme.HonorToolbox" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">#FF121212</item>
+    </style>
+</resources>

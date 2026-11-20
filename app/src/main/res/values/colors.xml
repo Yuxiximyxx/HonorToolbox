@@ -1,0 +1,15 @@
+<resources>
+    <!-- 哑光中性黑（与用户既有夜间图标定版一致） -->
+    <color name="ic_launcher_background">#171717</color>
+    <!-- 长按导航条选择框（原 NavWake 运行时弹框配色，原样保留） -->
+    <color name="nw_bg">#0B0F17</color>
+    <color name="nw_surface">#151B26</color>
+    <color name="nw_surface_alt">#1C2432</color>
+    <color name="nw_accent">#C8AA6E</color>
+    <color name="nw_text_primary">#F2F4F8</color>
+    <color name="nw_text_secondary">#93A0B5</color>
+    <color name="nw_divider">#223044</color>
+    <color name="nw_ok">#4CD08A</color>
+    <color name="nw_warn">#F2C14E</color>
+    <color name="nw_danger">#F26D6D</color>
+</resources>

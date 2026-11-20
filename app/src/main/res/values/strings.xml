@@ -1,0 +1,43 @@
+<resources>
+    <string name="app_name">荣耀工具箱</string>
+    <string name="app_subtitle">荣耀 MagicOS 功能合集：手势改向、通知中心主题、桌面图标日夜切换等</string>
+
+    <!-- 作用域：SystemUI（通知中心主题 + 导航条唤醒）、快服务
+         （手势改向落点）、启动器（图标日夜切换 + 桌面卡片探针） -->
+    <string-array name="xposedscope">
+        <item>com.android.systemui</item>
+        <item>com.hihonor.systemui</item>
+        <item>com.hihonor.magicvoice</item>
+        <item>com.hihonor.brain</item>
+        <item>com.hihonor.servicecenter</item>
+        <item>com.hihonor.android.launcher</item>
+    </string-array>
+
+    <!-- 图标日夜切换（原 NightIcon 设置项文案，ni_ 前缀防冲突；
+         st_no_service 一项随通道改为落盘后不再使用，未搬） -->
+    <string name="ni_switch_enabled">总开关</string>
+    <string name="ni_switch_summary">随系统日夜间模式切换桌面图标</string>
+    <string name="ni_section_theme">主题</string>
+    <string name="ni_section_status">状态</string>
+    <string name="ni_label_light">白天主题</string>
+    <string name="ni_label_dark">夜间主题</string>
+    <string name="ni_label_status">状态</string>
+    <string name="ni_pick_action">选择 .hwt/.hnt</string>
+    <string name="ni_current_fmt">当前：%1$s</string>
+    <string name="ni_not_selected">未选择</string>
+    <string name="ni_btn_apply">立即应用</string>
+    <string name="ni_btn_restart">重启桌面</string>
+    <string name="ni_st_ready">已就绪</string>
+    <string name="ni_st_no_icons">主题里没有图标</string>
+    <string name="ni_st_need_pick">请选择白天和夜间主题</string>
+    <string name="ni_st_extracting">正在解包…</string>
+    <string name="ni_st_pushing">正在下发到桌面…</string>
+    <string name="ni_st_disabled">总开关已关闭</string>
+    <string name="ni_st_applied">已下发，桌面正在刷新；若图标未变，请点「重启桌面」</string>
+    <string name="ni_toast_no_icons">该主题不包含图标</string>
+    <string name="ni_toast_bad_ext">请选择 .hwt 或 .hnt 主题文件</string>
+    <string name="ni_toast_extract_fail">解包失败：%1$s</string>
+    <string name="ni_toast_restart_root">已通过 root 重启桌面</string>
+    <string name="ni_toast_restart_hook">无 root，已通知桌面自行重启</string>
+    <string name="ni_toast_restart_fail">重启失败：无 root 且配置写入失败</string>
+</resources>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 启动图标前景：白色线描时钟（表盘 + 指针） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.62"
+        android:scaleY="0.62"
+        android:translateX="20.5"
+        android:translateY="20.5">
+        <path
+            android:pathData="M54,24 a30,30 0 1,0 0.01,0"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="5"
+            android:fillColor="@android:color/transparent" />
+        <path
+            android:pathData="M54,54 L54,37 M54,54 L68,61"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="5"
+            android:strokeLineCap="round"
+            android:fillColor="@android:color/transparent" />
+    </group>
+</vector>
