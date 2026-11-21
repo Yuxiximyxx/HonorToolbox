@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -406,7 +407,7 @@ private fun ToolboxHost(
                         if (glassBar) {
                             Modifier.drawWithContent {
                                 backdropLayer.record(
-                                    density = density,
+                                    density = this,
                                     layoutDirection = layoutDirection,
                                     size = IntSize(
                                         size.width.roundToInt(),
@@ -502,7 +503,7 @@ private fun FloatingGlassBar(
                         .clip(shape)
                         .drawWithContent {
                             blurLayer.record(
-                                density = density,
+                                density = this,
                                 layoutDirection = layoutDirection,
                                 size = IntSize(
                                     size.width.roundToInt(),
