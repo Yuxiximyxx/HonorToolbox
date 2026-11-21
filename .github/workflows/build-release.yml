@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.3.0-release.apk
+          cp "$SRC" dist/HonorToolbox-1.4.0-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.3.0-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.4.0-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,42 +66,40 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.3.0
-          name: 荣耀工具箱 1.3.0
+          tag_name: v1.4.0
+          name: 荣耀工具箱 1.4.0
           body: |
-            ## 荣耀工具箱 1.3.0（底栏药丸可拖动 + 资源库增强合入）
+            ## 荣耀工具箱 1.4.0（MagicPods 合入：OPPO 耳机设备中心）
 
-            **底栏药丸拖动补齐（移植自泥坛 LumaGA 的 FloatingTabDock）**
-            - v1.2.3 只搬了静态玻璃配方，这版把拖动系统补回来：
-              按住药丸横拖跟手（目录弹簧组：value ζ1.0/k1000、
-              press ζ1.0/k1000、scaleX ζ0.6/k250、scaleY
-              ζ0.7/k250、velocity ζ0.5/k300），松手吸附最近
-              一栏并切页；普通点按是零位移拖动、走同一条路径，
-              切页不回归。按压时药丸透镜放大（折射 10/14 ×
-              按压进度），胶囊带 4dp 橡皮筋平移与 +5% 绽放。
-            - LIQUID 玻璃全表与 v1.2.3 一字未动，药丸静止观感
-              不变。取舍：工具箱四栏标签常显，泥坛的
-              tabsBackdrop 强调色副本会与常显字形重影，故未
-              搬——药丸只采样页面内容做透镜，可见字形画在药
-              丸之上、永远清晰；代价是按压时字形本身不变形。
+            **MagicPods 合入（荣耀工具箱第二阶段第二弹）**
+            - 独立模块 MagicPods（OPPO Enco Free4 / Enco Air4 Pro
+              在 MagicOS 上走欢律协议接入荣耀设备中心）的全部功能
+              搬进工具箱：设备中心降噪卡片、双耳/充电仓电量、
+              降噪切换、状态栏耳机图标、通知电量文案、控制中心
+              降噪快捷磁贴，以及完整耳机详情页（电量环、降噪
+              分段、EQ、手势、固件信息、电量历史）。入口在
+              「系统 → 耳机 → OPPO Enco Free4 设备中心」。
+            - 技术移植：原模块基于 libxposed 现代 API，本版把
+              全部拦截点逐处转到传统 Xposed API（与工具箱其余
+              功能同底座、同一入口分发）；配置通道由
+              RemotePreferences 换成落盘现读
+              （/sdcard/Download/HonorToolbox/magicpods/），
+              键名与默认值不变。
+            - 数据零迁移：约 37 个 magicorig_* Settings.Global
+              键（电量/电量历史/EQ/手势/固件/降噪状态）与蓝牙
+              进程内 magicorig_device / magicorig_battery 存储
+              全部保名，旧版的历史电量等数据装上即在。
+              仅原 RemotePreferences 里的小配置（伪装设备 ID、
+              日志级别、点击动作等，多为默认值）不迁移、回到
+              默认值，不影响耳机功能与历史数据。
 
-            **资源库增强（LibraryPlus）合入**
-            - 独立模块 LibraryPlus 的全部功能搬进工具箱：隐藏
-              应用、文件夹改名、新建分类、自定义分类、最后一
-              页左滑打开资源库、上滑打开荣耀搜索、从右侧滑入
-              动画、荣耀搜索净化 / 搜索范围 / 搜索引擎、重启
-              作用域与生效状态。入口在「系统 → 桌面 → 资源库
-              增强」，功能、默认值、落盘语义与独立版一致。
-            - 共存处理：signature 权限名与 Provider authority
-              已随工具箱包名改名（见下），状态回传保留
-              Provider 通道；旧版 LibraryPlus 的配置会在打开
-              资源库设置页时按时间戳自动迁移过来（读不到就用
-              默认值，不影响使用）。
-
-            ⚠️ 装好后请：① 在 LSPosed 里给工具箱作用域确认勾
-            上资源库（com.hihonor.hiboard）与荣耀搜索
-            （com.hihonor.search）（桌面原本已勾）；② 停用旧
-            的独立版 LibraryPlus 模块，避免双重 hook；③ 重启
-            一次作用域让新 hook 生效。
+            ⚠️ 装好后请：① 在 LSPosed 里给工具箱新勾五个作用
+            域：com.android.bluetooth、com.hihonor.audioaccessorymanager、
+            com.hihonor.imedia.sws、com.hihonor.controlcenter
+            （com.android.systemui 原本已勾）；② **停用旧的独立
+            版 MagicPods 模块**，避免双重 hook；③ 重启一次作用
+            域让新 hook 生效。本版未经真机验证，请按需回验：
+            设备中心卡片出现、电量显示、降噪切换、详情页各项、
+            EQ 与手势保存、历史电量数据是否还在。
 
           files: dist/*.apk

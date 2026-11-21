@@ -5,6 +5,9 @@ plugins {
     // AGP 9 内置 Kotlin：不再 apply org.jetbrains.kotlin.android（apply 会直接报错），
     // 与 MagicPods 同款。
     alias(libs.plugins.composeCompiler)
+    // MagicPods 合入（v1.4.0）：ConfigManager 的 AppConfig 与强提示
+    // 数据类用 kotlinx.serialization（原 MagicPods 同款插件）
+    alias(libs.plugins.kotlinSerialization)
 }
 
 // 发布签名密钥库。*.jks 在 .gitignore 里，克隆仓库后该文件默认不存在；
@@ -24,8 +27,8 @@ android {
         applicationId = "io.github.yuxiximyxx.honortoolbox"
         minSdk = 34   // Android 14 (MagicOS 8 起，与 MagicPods 一致)
         targetSdk = 35
-        versionCode = 10
-        versionName = "1.3.0"
+        versionCode = 11
+        versionName = "1.4.0"
         // 资源库增强（LibraryPlus 合入）带 DexKit 原生库，只留 arm64
         ndk { abiFilters += listOf("arm64-v8a") }
     }
@@ -225,6 +228,11 @@ dependencies {
     // 是 backdrop 的 runtime 依赖、用 Capsule 需显式声明
     // （贴吧 fork 同款处理）。
     implementation("io.github.kyant0:backdrop:2.0.1")
+
+    // MagicPods 合入（v1.4.0）：配置 JSON 与详情页/协议层协程
+    // （原 MagicPods 同款版本）
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
     // DexKit（资源库增强合入）：hook 侧按字符串定位混淆类，
     // 找不到目标时各 hook 自带硬编码类名兜底（原 LibraryPlus 同款）

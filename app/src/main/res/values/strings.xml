@@ -19,6 +19,13 @@
              「模块未激活」的根因；QuickGesture 单模块的作用
              域一直含自身包名）。 -->
         <item>io.github.yuxiximyxx.honortoolbox</item>
+        <!-- MagicPods（v1.4.0 合入）：蓝牙协议、荣耀耳机面板、
+             SWS 媒体输出、设备中心（控制中心）；
+             com.android.systemui 已在上方（与通知中心主题共用） -->
+        <item>com.android.bluetooth</item>
+        <item>com.hihonor.audioaccessorymanager</item>
+        <item>com.hihonor.imedia.sws</item>
+        <item>com.hihonor.controlcenter</item>
     </string-array>
 
     <!-- 图标日夜切换（原 NightIcon 设置项文案，ni_ 前缀防冲突；

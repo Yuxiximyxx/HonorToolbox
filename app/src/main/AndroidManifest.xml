@@ -35,6 +35,13 @@
     <!-- 资源库增强（LibraryPlus 合入）：只有同签名的应用能发送
          配置变更 / 重启作用域广播（原独立版同款 signature 权限，
          随工具箱包名改名，见 libraryplus/LpConfig.kt 的 Const）。 -->
+    <!-- MagicPods（v1.4.0 合入）：耳机详情页与控制中心磁贴
+         需要的蓝牙/通知权限（原 MagicPods 同款声明） -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
     <permission
         android:name="io.github.yuxiximyxx.honortoolbox.permission.CONFIG"
         android:protectionLevel="signature" />
@@ -79,6 +86,27 @@
 
 
 
+
+        <!-- MagicPods 耳机详情页（v1.4.0 合入）：控制中心卡片
+             点击经 setClassName 直达本 Activity，必须 exported
+             （原 MagicPods 同款声明，主题沿用其 DeviceDefault） -->
+        <activity
+            android:name=".magicpods.EarphoneDetailActivity"
+            android:exported="true"
+            android:label="OPPO Enco Free4"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+
+        <!-- MagicPods 控制中心降噪快捷磁贴（原 MagicPods 同款） -->
+        <service
+            android:name=".magicpods.hook.QuickSettingsAncTile"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="MagicPods"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
 
         <!-- 资源库增强的配置 Provider（原 LibraryPlus 同款，authority
              随工具箱包名改名）：被 hook 进程读配置、上报生效状态。 -->

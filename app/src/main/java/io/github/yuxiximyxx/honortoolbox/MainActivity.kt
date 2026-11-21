@@ -108,6 +108,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import io.github.yuxiximyxx.honortoolbox.libraryplus.LibraryPlusScreen
+import io.github.yuxiximyxx.honortoolbox.magicpods.EarphoneDetailActivity
 import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeScreen
 import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeStore
 import io.github.yuxiximyxx.honortoolbox.navwake.config.NavConfig
@@ -480,6 +481,11 @@ private fun ToolboxHost(
                     onOpenShade = { systemPage = SystemPage.Shade },
                     onOpenNightIcon = { systemPage = SystemPage.NightIcon },
                     onOpenLibraryPlus = { systemPage = SystemPage.LibraryPlus },
+                    onOpenEarphone = {
+                        context.startActivity(
+                            Intent(context, EarphoneDetailActivity::class.java),
+                        )
+                    },
                 )
                 SystemPage.QuickGesture -> QuickGestureScreen(
                     onExit = { systemPage = SystemPage.Root },
@@ -1434,6 +1440,7 @@ private fun SystemScreen(
     onOpenShade: () -> Unit,
     onOpenNightIcon: () -> Unit,
     onOpenLibraryPlus: () -> Unit,
+    onOpenEarphone: () -> Unit,
 ) {
     Scaffold(
         containerColor = MiuixTheme.colorScheme.surface,
@@ -1514,9 +1521,10 @@ private fun SystemScreen(
                     insideMargin = PaddingValues(start = 4.dp, top = 16.dp),
                 )
                 Card(modifier = Modifier.fillMaxWidth()) {
-                    PlaceholderRow(
+                    SuperArrow(
                         title = "OPPO Enco Free4 设备中心",
-                        summary = "下一阶段合入",
+                        summary = "MagicPods：电量、降噪、EQ、手势与固件（v1.4.0 合入）",
+                        onClick = onOpenEarphone,
                     )
                     PlaceholderRow(
                         title = "索尼 WH-1000XM4 设备中心",

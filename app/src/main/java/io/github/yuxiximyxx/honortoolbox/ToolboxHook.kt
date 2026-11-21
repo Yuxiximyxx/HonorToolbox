@@ -7,6 +7,7 @@ import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_InitPackageResources
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 import io.github.yuxiximyxx.honortoolbox.libraryplus.hook.LibraryPlusHook
+import io.github.yuxiximyxx.honortoolbox.magicpods.hook.MagicPodsHook
 import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeHook
 import io.github.yuxiximyxx.honortoolbox.nighticon.NightIconHook
 import io.github.yuxiximyxx.honortoolbox.quickgesture.QuickGestureHook
@@ -60,6 +61,17 @@ class ToolboxHook : IXposedHookLoadPackage, IXposedHookInitPackageResources {
                     ShadeClockHook().handleLoadPackage(lpparam)
                 }
                 NavWakeHook.install(lpparam)
+                // MagicPods（v1.4.0 合入）：状态栏耳机图标 + 控制中心
+                // 降噪卡的 systemui 双装路径（原版同款，见 MagicPodsHook）
+                MagicPodsHook.install(lpparam)
+            }
+            "com.android.bluetooth",
+            "com.hihonor.audioaccessorymanager",
+            "com.hihonor.imedia.sws",
+            "com.hihonor.controlcenter" -> {
+                // MagicPods（v1.4.0 合入）：蓝牙协议/设备中心卡片/
+                // 荣耀耳机面板/SWS 占位，宿主分发在 MagicPodsHook 内
+                MagicPodsHook.install(lpparam)
             }
             "com.hihonor.systemui",
             "com.hihonor.magicvoice",
