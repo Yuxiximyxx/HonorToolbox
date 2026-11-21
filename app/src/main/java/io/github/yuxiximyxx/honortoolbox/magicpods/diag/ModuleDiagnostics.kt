@@ -8,7 +8,7 @@ import java.util.zip.ZipFile
  * ModuleDiagnostics —— 在手机上直接自检「LSPosed 能不能把本 APK 认成模块」。
  *
  * v1.4.0 合入荣耀工具箱时按传统 Xposed API 重写（原版按 libxposed 现代
- * 模块声明 META-INF/xposed/* 判定，合入后失效）：
+ * 模块声明（META-INF/xposed 目录）判定，合入后失效）：
  * 传统模块的识别条件（LSPosed ModuleUtil.isLegacyModule）是
  *   1. APK 内有 assets/xposed_init 且非空（入口类清单）；
  *   2. manifest meta-data 含 xposedminversion。
