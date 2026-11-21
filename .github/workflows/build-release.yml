@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.2.2-release.apk
+          cp "$SRC" dist/HonorToolbox-1.2.3-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.2.2-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.2.3-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,39 +66,47 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.2.2
-          name: 荣耀工具箱 1.2.2
+          tag_name: v1.2.3
+          name: 荣耀工具箱 1.2.3
           body: |
-            ## 荣耀工具箱 1.2.2（三项修复）
+            ## 荣耀工具箱 1.2.3（底栏玻璃对齐泥坛 + 全应用沉浸 + 激活检测免勾自身）
 
             功能、设置项、默认值与生效方式一概不变，覆盖
             安装即可、配置不用重设。
 
-            **修「模块未激活」误报 + 大卡可点跳 LSPosed**
-            - 上一版作用域声明漏了工具箱自身包名，LSPosed
-              不把模块注入工具箱自己的进程，激活自检永远
-              命中不了——模块明明在工作却报未激活。本版已
-              补上，大卡状态恢复真值。
-            - 首页状态大卡现在整卡可点，点一下直接打开
-              LSPosed 管理器。
+            **底栏玻璃换泥坛 LIQUID（液态）档 + 对齐边缘**
+            - 1.2.2 的磨砂档在真机上没有玻璃感（折射、通
+              透、模糊、色散都看不见）：磨砂档本就是三档
+              里最弱的，叠纱又厚。这版换成泥坛 GlassSpec
+              的 LIQUID 档整表：叠纱 α0.32、饱和 1.5、模
+              糊 8dp、透镜 24/24 带色散、高光 0.85；外壳
+              边缘换泥坛同款 aligned surround（双峰边缘
+              + 八层光晕 + 定色投影）。
+            - 录制层按泥坛定式先铺页面背景，采样纹理处
+              处不透明，不会再被压成熏黑胶囊。
+            - 几何改泥坛公式：72dp 槽宽 + 6dp 内边距、
+              封顶 380dp、高 68dp、栏底间隙 10dp；选中
+              药丸改 LIQUID 档的近黑薄膜，不再夜间反转
+              成大白椭圆。
 
-            **首页加「本机信息」卡**
-            - 机型（营销名优先）、系统版本完整串、Android
-              版本与 API 级别、内核版本完整串，全部真读
-              系统值，与系统「关于手机」逐项对得上。原小
-              卡改为工具箱版本，不再两处写同一信息。
+            **全应用沉浸**
+            - 状态栏与系统导航条全透明，内容铺到屏幕物
+              理底边，底栏浮在内容之上、栏下采样的是真
+              内容，屏幕底边不再有实色黑带。四个功能子
+              页、关于页、选应用页同样处理。
 
-            **悬浮底栏换三家同款液态玻璃**
-            - 自绘模糊方案废弃，换成泥坛/贴吧/酷安三家
-              fork 在用的 Kyant backdrop 真采样玻璃：饱和
-              →模糊→透镜折射→边缘高光，叠纱是三家默认的
-              磨砂档。宽度（栏数×88dp、封顶屏宽−32dp）、
-              68dp 高、选中深色药丸、玻璃关变实色、悬浮
-              关变贴底栏，行为都不变。
+            **激活检测不再依赖勾自身作用域**
+            - 任一宿主进程的 hook 加载时往 Download/
+              HonorToolbox/activation_status.txt 写状态
+              文件，首页大卡改双信号判定：没勾工具箱自
+              己也不会再误报未激活；文件版本落后时显示
+              「已激活 · 旧版运行中」的中间态。
 
-            ⚠️ 从旧版升级直接覆盖安装即可，配置不用重设。
-            装好后请在 LSPosed 里确认工具箱作用域包含它
-            自己（新装/首次升级会多出这一项，勾上并重启
-            一次工具箱即可）。
+            ⚠️ 装好后请重启一次作用域（强停各宿主，或用
+            首页的重启入口）：现在宿主里跑的还是旧版
+            hook、不会写状态文件，重启后新文件才会被写
+            出来。这是最后一次需要做这个动作——以后升
+            级即使没重启作用域，大卡也会如实显示旧版运
+            行中，不再误报未激活。
 
           files: dist/*.apk

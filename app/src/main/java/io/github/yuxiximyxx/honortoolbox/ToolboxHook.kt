@@ -74,6 +74,12 @@ class ToolboxHook : IXposedHookLoadPackage, IXposedHookInitPackageResources {
                 QuickGestureHook().handleLoadPackage(lpparam)
             }
         }
+        // 激活状态文件（v1.2.3）：分发到功能宿主并跑完该分支
+        // 安装后写一次，设置应用据此判定激活——不再依赖用户
+        // 在 LSPosed 里勾工具箱自身作用域（自身包名分支已在
+        // 上面 return，不会走到这里）。写失败静默，不影响
+        // hook 本职；只在进程加载时写这一次。
+        ActivationStatus.writeFromHook(lpparam.packageName)
     }
 
     override fun handleInitPackageResources(

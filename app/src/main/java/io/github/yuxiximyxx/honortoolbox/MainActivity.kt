@@ -11,6 +11,7 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,17 +26,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -51,10 +51,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -70,7 +77,6 @@ import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.colorControls
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.highlight.Highlight
-import com.kyant.shapes.Capsule
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -91,6 +97,7 @@ import io.github.yuxiximyxx.honortoolbox.shadeclock.ThemeStore
 import io.github.yuxiximyxx.honortoolbox.shadeclock.makePrefsReadable
 import java.io.File
 import java.util.concurrent.TimeUnit
+import kotlin.math.min
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -137,17 +144,27 @@ import top.yukonga.miuix.kmp.theme.ThemeController
  *   偏好 [AppSettings]，不碰任何功能配置通道）+ 关于入口。
  *
  * 底栏：悬浮开时是压在滚动内容之上的胶囊，内容可从栏下
- * 滚过；玻璃开时栏体是 Kyant backdrop 真采样液态玻璃——
- * 泥坛/贴吧/酷安三家 fork 悬浮 Dock 的同款配方（v1.2.2
- * 接入，取代 v1.2.0–v1.2.1 的 GraphicsLayer 自绘模糊，
- * 小乐真机批自绘版质感远不如三家）：内容层经
- * layerBackdrop 录制，栏体 drawBackdrop 走「饱和 1.3 →
- * 模糊 20dp → 透镜折射 20/6 → 边缘高光」效果链，叠纱用
- * 三家默认磨砂档（深 #121212 α0.55 / 浅 #FAFAFA α0.58）。
- * 宽度按栏目数自适应（每栏固定槽宽、封顶屏宽减两侧各
- * 16dp）、高 68dp、选中项是深色椭圆药丸底配浅色图标文字
- * （单元格自绘）；玻璃关时同一胶囊变实色，悬浮关时改用
- * 库的贴底 NavigationBar。
+ * 滚过；玻璃开时栏体是 Kyant backdrop 真采样液态玻璃。
+ * v1.2.3 按泥坛现行实现逐参数对齐（详见 FloatingGlassBar
+ * 注释）：LIQUID 档整表（叠纱 α0.32、饱和 1.5、模糊
+ * 8dp、透镜 24/24 带色散、高光 0.85）+ aligned surround
+ * 对齐边缘；几何改泥坛公式（72dp 槽宽 + 6dp 内边距、
+ * 封顶 380dp、栏底间隙 10dp）。v1.2.2 的磨砂档在真机
+ * 上被批「折射、通透、模糊、色散一个都没有」：磨砂档本
+ * 就是三档里最弱的（叠纱 α0.55、透镜仅 20/6、无色散），
+ * 且当时窗口未沉浸、栏正下方恰是各页留白的纯色区，均匀
+ * 场采样后仍是均匀色——本版连窗口沉浸一起改（见
+ * onCreate），内容真铺到栏下，录制节点内再按泥坛
+ * recordedPageBackground 定式先铺一层页面背景，保证采
+ * 样纹理处处不透明（泥坛 v1.7.8 踩过：纹理缺背景层、
+ * 透明像素被采样压黑，栏会变成熏黑胶囊）。玻璃关时同
+ * 一胶囊变实色，悬浮关时改用库的贴底 NavigationBar。
+ *
+ * 激活判定（v1.2.3）：首页大卡改双信号取或——自检标记
+ * （需 LSPosed 勾自身作用域）或激活状态文件（任一宿主
+ * 进程的 hook 加载时写，见 ActivationStatus）；文件版
+ * 本落后于本版时是「旧版 hook 还在跑」的中间态，不再
+ * 误报未激活。
  *
  * 页面底色口径（v1.2.1）：各页 Scaffold 底色统一用
  * colorScheme.surface（浅色 #F7F7F7、夜间纯黑），卡片用
@@ -170,8 +187,19 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 全应用沉浸（v1.2.3，泥坛 MainActivity 同款断言）：
+        // 状态栏与系统导航条全透明、内容铺到屏幕物理底边，
+        // 悬浮底栏浮在内容之上采样真内容，不再有实色黑带。
+        // 各页顶部避让由 miuix Scaffold 的 systemBars
+        // insets 处理（其 contentWindowInsets 默认含
+        // systemBars），顶栏不会顶进状态栏。
+        enableEdgeToEdge()
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         @Suppress("DEPRECATION")
-        run { window.statusBarColor = 0x00000000 }
+        run {
+            window.statusBarColor = 0x00000000
+            window.navigationBarColor = 0x00000000
+        }
         // 配置绑定（见类注释）：长按唤醒绑定 + 通知中心偏好可读
         NavConfig.bind(getSharedPreferences(NavConfig.PREFS_NAME, MODE_PRIVATE))
         NavConfig.onChanged = { NavWakeStore.syncFromPrefs(this) }
@@ -249,8 +277,8 @@ private enum class ToolboxTab { Home, System, Apps, Settings }
 /** 「系统」页内部页：分组总览 / 四个功能的完整设置子页。 */
 private enum class SystemPage { Root, QuickGesture, NavWake, Shade, NightIcon }
 
-/** 悬浮底栏占的高度余量：各页滚动内容底部留白加上它，最后一项不被栏遮住。 */
-private val FLOATING_BAR_INSET = 108.dp
+/** 首页大卡的激活三态（v1.2.3）：已激活 / 旧版 hook 还在跑 / 未激活。 */
+private enum class ActivationUiState { Active, ActiveOld, Inactive }
 
 @Composable
 private fun ToolboxHost(
@@ -264,11 +292,24 @@ private fun ToolboxHost(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    // 首页状态大卡的真值：激活状态走模块自检标记（见
-    // ModuleActivation），作用域个数读模块声明的作用域数组。
+    // 首页状态大卡的真值：激活状态走双信号（自检标记或
+    // 激活状态文件，见下方 activationFile），作用域个数
+    // 读模块声明的作用域数组。
     // 标记在 ON_RESUME 时随 refresh 一并重读：用户刚在
     // LSPosed 里启用完切回来（进程已被注入）能立刻翻状态。
     var moduleActive by remember { mutableStateOf(ModuleActivation.isActive()) }
+    // 激活状态文件（任一宿主进程的 hook 加载时写，见
+    // ActivationStatus）：与自检标记双信号取或。标记要
+    // LSPosed 勾工具箱自身作用域才命中，用户只勾「推荐
+    // 应用」时命不中——文件信号兜底；文件 versionCode
+    // 落后于本版说明宿主里跑的还是旧版 hook（中间态）。
+    var activationFile by remember { mutableStateOf<ActivationStatus.FileInfo?>(null) }
+    val activationState = when {
+        moduleActive -> ActivationUiState.Active
+        activationFile == null -> ActivationUiState.Inactive
+        activationFile!!.versionCode >= BuildConfig.VERSION_CODE -> ActivationUiState.Active
+        else -> ActivationUiState.ActiveOld
+    }
     val scopeCount = remember {
         context.resources.getStringArray(R.array.xposedscope).size
     }
@@ -284,6 +325,12 @@ private fun ToolboxHost(
         moduleActive = ModuleActivation.isActive()
         scope.launch {
             state = withContext(Dispatchers.IO) { loadHomeState(context) }
+            activationFile = withContext(Dispatchers.IO) {
+                // 先占位建文件（已有则不动），保证宿主进程之后
+                // 覆盖写的是设置应用自有文件、读得回来
+                ActivationStatus.ensurePlaceholder(context)
+                ActivationStatus.read(context)
+            }
         }
     }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -360,7 +407,17 @@ private fun ToolboxHost(
         systemPage = SystemPage.Root
     }
 
-    val bottomInset = if (floatingBar) FLOATING_BAR_INSET else 0.dp
+    // 悬浮栏下的滚动留白（泥坛 tabDockContentBottomPadding
+    // 定版）：栏高 + 栏底间隙 + 呼吸 16dp + 本机导航条
+    // inset。窗口已沉浸、页面背景本身铺到物理底边，这段
+    // 留白只是滚动余量——保证最后一项能滚出栏的遮挡，
+    // 不是实色底带。
+    val navBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomInset = if (floatingBar) {
+        DOCK_HEIGHT + DOCK_BOTTOM_GAP + 16.dp + navBottomPadding
+    } else {
+        0.dp
+    }
 
     @Composable
     fun TabContent() {
@@ -368,7 +425,8 @@ private fun ToolboxHost(
             ToolboxTab.Home -> HomeScreen(
                 state = state,
                 syncHint = syncHint,
-                moduleActive = moduleActive,
+                activationState = activationState,
+                activationFileVersion = activationFile?.versionCode,
                 scopeCount = scopeCount,
                 bottomInset = bottomInset,
                 onOpenLsposed = { openLsposedManager(context) },
@@ -436,7 +494,14 @@ private fun ToolboxHost(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .then(if (glassBar) Modifier.layerBackdrop(backdrop) else Modifier),
+                    .then(if (glassBar) Modifier.layerBackdrop(backdrop) else Modifier)
+                    // 录制节点内先铺一层页面背景（泥坛
+                    // recordedPageBackground 定式）：Kyant 只
+                    // 录本节点画出的东西，纹理没画到的区域是
+                    // 透明的、采样时会被压成近黑——背景先进
+                    // 纹理，采样到的处处是完整页面。屏幕上无
+                    // 变化，各页 Scaffold 本来就画这个颜色。
+                    .background(MiuixTheme.colorScheme.surface),
             ) {
                 TabContent()
             }
@@ -483,21 +548,108 @@ private fun ToolboxHost(
     }
 }
 
-/** 悬浮 Dock 每栏的固定槽宽（宽度自适应的定宽口径）。 */
-private val DOCK_SLOT_WIDTH = 88.dp
+/** 悬浮 Dock 每栏的槽宽（泥坛 MainTabDock 定版：72dp）。 */
+private val DOCK_SLOT_WIDTH = 72.dp
 
-/** 悬浮 Dock 高度（定版配方约 68dp）。 */
+/** 悬浮 Dock 内边距：槽行与胶囊边缘之间（泥坛定版 6dp）。 */
+private val DOCK_INNER_PADDING = 6.dp
+
+/** 悬浮 Dock 高度（泥坛定版 68dp）。 */
 private val DOCK_HEIGHT = 68.dp
 
+/** 悬浮 Dock 宽度的绝对上限（泥坛定版 380dp）。 */
+private val DOCK_MAX_WIDTH = 380.dp
+
+/** Dock 底边与系统导航区之间的间隙（泥坛定版 10dp）。 */
+private val DOCK_BOTTOM_GAP = 10.dp
+
 /**
- * 悬浮胶囊底栏：压在内容之上，宽度按栏目数自适应——栏数
- * × 固定槽宽，封顶为屏宽减两侧各 16dp，栏身居中；高
- * 68dp。玻璃开时栏体是 Kyant backdrop 真采样液态玻璃
- * （三家 fork 同款配方，见类注释）；玻璃关时是同一胶囊
- * 的实色版。选中项是深色椭圆药丸底 + 浅色图标文字（夜
- * 间反转为浅药丸深字，保证对比），未选中是前景弱色。
- * 单元格自绘：库的 FloatingNavigationBarItem 给不了定
- * 宽槽位与药丸配色。
+ * 泥坛 LIQUID（液态）档外壳的对齐边缘模型（aligned
+ * surround）：双峰边缘——上弧最亮、下弧次之——以两道
+ * border 呈现（宽而弱的内发光带 + 窄的边缘线），外加
+ * 向外的多层光晕与定色投影。数值逐项照泥坛 MainTabDock
+ * 的 dockAlignedSurround / DockHaloLayers（源自贴吧
+ * FloatingDock 的定版表）。
+ */
+private data class DockSurround(
+    val rimTop: Color,
+    val rimBottom: Color,
+    val haloBase: Color,
+    val shadowColor: Color,
+)
+
+private fun dockSurround(dark: Boolean): DockSurround = if (dark) {
+    DockSurround(
+        rimTop = Color.White.copy(alpha = 0.22f),
+        rimBottom = Color.White.copy(alpha = 0.10f),
+        haloBase = Color.White.copy(alpha = 0.05f),
+        shadowColor = Color.Black.copy(alpha = 0.22f),
+    )
+} else {
+    DockSurround(
+        rimTop = Color.White.copy(alpha = 0.90f),
+        rimBottom = Color.Black.copy(alpha = 0.10f),
+        haloBase = Color.Black.copy(alpha = 0.045f),
+        shadowColor = Color.Black.copy(alpha = 0.10f),
+    )
+}
+
+/** 对齐边缘的光晕层表：描边宽 dp → alpha 系数（泥坛定版）。 */
+private val DOCK_HALO_LAYERS: List<Pair<Float, Float>> = listOf(
+    0.75f to 0.30f, 1.5f to 0.22f, 2.25f to 0.16f, 3f to 0.117f,
+    3.75f to 0.085f, 4.5f to 0.062f, 5.25f to 0.045f, 6f to 0.033f,
+)
+
+/** 双峰边缘的四段垂直渐变刷（泥坛 dockRimBrush；工具箱无高光微调，系数恒 1）。 */
+private fun dockRimBrush(surround: DockSurround, factor: Float): Brush {
+    val top = surround.rimTop.copy(
+        alpha = (surround.rimTop.alpha * factor).coerceAtMost(1f),
+    )
+    val bottom = surround.rimBottom.copy(
+        alpha = (surround.rimBottom.alpha * factor).coerceAtMost(1f),
+    )
+    return Brush.verticalGradient(
+        0f to top,
+        0.35f to top.copy(alpha = 0f),
+        0.65f to bottom.copy(alpha = 0f),
+        1f to bottom,
+    )
+}
+
+/** 光晕：多层同心描边逐层向外扩、alpha 递减（泥坛 drawDockHalo）。 */
+private fun DrawScope.drawDockHalo(haloBase: Color) {
+    DOCK_HALO_LAYERS.forEach { (widthDp, factor) ->
+        val wPx = widthDp.dp.toPx()
+        val half = wPx / 2f
+        drawRoundRect(
+            color = haloBase.copy(alpha = haloBase.alpha * factor),
+            topLeft = Offset(-half, -half),
+            size = Size(size.width + wPx, size.height + wPx),
+            cornerRadius = CornerRadius(size.height / 2f + half, size.height / 2f + half),
+            style = Stroke(width = wPx),
+        )
+    }
+}
+
+/**
+ * 悬浮胶囊底栏（v1.2.3 按泥坛现行实现逐参数对齐）：
+ *
+ * - 几何：高 68dp；宽 = 栏数 × 72dp 槽宽 + 两侧 6dp 内
+ *   边距，封顶屏宽 −32dp 与 380dp；放置是居中 + 先吃
+ *   导航条 inset 再留 10dp 间隙（泥坛 MainTabBar 的摆
+ *   法），窗口已沉浸、栏下就是真内容。
+ * - 玻璃开：泥坛 LIQUID 档整表——叠纱深 #121212 α0.32
+ *   / 浅 #FAFAFA α0.32，效果链饱和 1.5 → 模糊 8dp →
+ *   透镜 24/24 带色散，高光 1.0 × 0.85（泥坛外壳系数
+ *   DockLiquidHighlightScale）；外壳边缘走 aligned
+ *   surround（双峰边缘 + 八层光晕 + 定色 10dp 投影）。
+ * - 选中药丸：LIQUID 档的近黑薄膜（深 α0.12 / 浅
+ *   α0.08）贴合槽位；选中字形取主题强调色，未选中取
+ *   泥坛 LIQUID 行的字形色（深 #F2F2F7 / 浅 #3A3A3C）。
+ *   泥坛的药丸拖动/果冻动画与其自家手势机绑定，静态
+ *   观感不依赖它，未搬（标签常显沿用工具箱既有口径）。
+ * - 玻璃关：同一胶囊变实色（既有行为）；悬浮关走库的
+ *   贴底 NavigationBar（宿主侧处理，不在这里）。
  */
 @Composable
 private fun FloatingGlassBar(
@@ -516,92 +668,139 @@ private fun FloatingGlassBar(
     val shape = RoundedCornerShape(percent = 50)
     val scheme = MiuixTheme.colorScheme
     val darkBar = scheme.surfaceContainer.luminance() < 0.5f
-    // 叠纱：三家定版的默认磨砂档（深 #121212 α0.55 / 浅
-    // #FAFAFA α0.58），绝不走厚乳纱路线。
+    val surround = dockSurround(darkBar)
+    // LIQUID 档叠纱（深 #121212 α0.32 / 浅 #FAFAFA α0.32）
     val glassTint = if (darkBar) {
-        Color(0xFF121212).copy(alpha = 0.55f)
+        Color(0xFF121212).copy(alpha = 0.32f)
     } else {
-        Color(0xFFFAFAFA).copy(alpha = 0.58f)
+        Color(0xFFFAFAFA).copy(alpha = 0.32f)
     }
-    val borderColor = if (darkBar) {
-        Color.White.copy(alpha = 0.10f)
-    } else {
-        Color.White.copy(alpha = 0.55f)
-    }
-    // 选中药丸：日间深底浅字、夜间浅底深字（同一对比口径）
-    val pillColor = scheme.onSurfaceContainer
-    val pillContent = scheme.surfaceContainer
-    val idleContent = scheme.onSurfaceVariantSummary
+    // LIQUID 档选中药丸：近黑薄膜（深 α0.12 / 浅 α0.08）
+    val pillColor = Color.Black.copy(alpha = if (darkBar) 0.12f else 0.08f)
+    val idleContent = if (darkBar) Color(0xFFF2F2F7) else Color(0xFF3A3A3C)
+    val accent = scheme.primary
+    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+    val dockWidth = minOf(
+        DOCK_SLOT_WIDTH * tabs.size + DOCK_INNER_PADDING * 2,
+        (screenWidth - 32.dp).coerceAtLeast(0.dp),
+        DOCK_MAX_WIDTH,
+    )
     Box(
         modifier = modifier
-            .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 12.dp),
+            .navigationBarsPadding()
+            .padding(bottom = DOCK_BOTTOM_GAP),
         contentAlignment = Alignment.Center,
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .width(DOCK_SLOT_WIDTH * tabs.size)
-                .height(DOCK_HEIGHT)
-                .shadow(elevation = 16.dp, shape = shape)
-                .then(
-                    if (glass) {
-                        Modifier
-                            .drawBackdrop(
-                                backdrop = backdrop,
-                                shape = { Capsule() },
-                                effects = {
-                                    colorControls(saturation = 1.3f)
-                                    blur(20.dp.toPx())
-                                    lens(
-                                        refractionHeight = 20.dp.toPx(),
-                                        refractionAmount = 6.dp.toPx(),
-                                        chromaticAberration = false,
-                                    )
-                                },
-                                highlight = { Highlight(alpha = 0.35f) },
-                                shadow = { null },
-                                onDrawSurface = { drawRect(glassTint) },
-                            )
-                            .border(1.dp, borderColor, shape)
-                    } else {
-                        Modifier.background(scheme.surfaceContainer, shape)
-                    },
-                )
-                .padding(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .width(dockWidth)
+                .height(DOCK_HEIGHT),
         ) {
-            for ((value, icon, label) in tabs) {
-                val selected = tab == value
-                val contentColor = if (selected) pillContent else idleContent
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clip(shape)
-                        .then(
-                            if (selected) Modifier.background(pillColor, shape) else Modifier,
-                        )
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                        ) { onSelect(value) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = label,
-                            tint = contentColor,
-                            modifier = Modifier.size(22.dp),
-                        )
-                        Text(
-                            text = label,
-                            fontSize = 11.sp,
-                            color = contentColor,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                        )
+            // ── 外壳：玻璃开走 LIQUID 链 + 对齐边缘；关走实色 ──
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .shadow(
+                        elevation = 10.dp,
+                        shape = shape,
+                        clip = false,
+                        ambientColor = surround.shadowColor,
+                        spotColor = surround.shadowColor,
+                    )
+                    .then(
+                        if (glass) {
+                            Modifier
+                                .drawBackdrop(
+                                    backdrop = backdrop,
+                                    shape = { shape },
+                                    effects = {
+                                        colorControls(saturation = 1.5f)
+                                        blur(8.dp.toPx())
+                                        lens(
+                                            refractionHeight = min(
+                                                24.dp.toPx(),
+                                                size.minDimension / 2f,
+                                            ),
+                                            refractionAmount = min(
+                                                24.dp.toPx(),
+                                                size.minDimension,
+                                            ),
+                                            chromaticAberration = true,
+                                        )
+                                    },
+                                    highlight = { Highlight(alpha = 0.85f) },
+                                    shadow = { null },
+                                    onDrawSurface = { drawRect(glassTint) },
+                                )
+                                // 光晕贴在轮廓外侧：必须在 clip 之前画，
+                                // 否则被裁掉（泥坛同款顺序）
+                                .drawBehind { drawDockHalo(surround.haloBase) }
+                        } else {
+                            Modifier.background(scheme.surfaceContainer, shape)
+                        },
+                    )
+                    .clip(shape)
+                    .then(
+                        if (glass) {
+                            Modifier
+                                .border(3.dp, dockRimBrush(surround, 0.25f), shape)
+                                .border(1.5.dp, dockRimBrush(surround, 1f), shape)
+                        } else {
+                            Modifier.border(
+                                1.dp,
+                                if (darkBar) {
+                                    Color.White.copy(alpha = 0.10f)
+                                } else {
+                                    Color.Black.copy(alpha = 0.07f)
+                                },
+                                shape,
+                            )
+                        },
+                    ),
+            )
+            // ── 槽行：药丸 + 图标文字（自绘单元格，定宽槽位）──
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(DOCK_INNER_PADDING),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                for ((value, icon, label) in tabs) {
+                    val selected = tab == value
+                    val contentColor = if (selected) accent else idleContent
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(shape)
+                            .then(
+                                if (selected) {
+                                    Modifier.background(pillColor, shape)
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { onSelect(value) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = label,
+                                tint = contentColor,
+                                modifier = Modifier.size(22.dp),
+                            )
+                            Text(
+                                text = label,
+                                fontSize = 11.sp,
+                                lineHeight = 13.sp,
+                                color = contentColor,
+                                fontWeight = FontWeight.Medium,
+                            )
+                        }
                     }
                 }
             }
@@ -612,10 +811,11 @@ private fun FloatingGlassBar(
 /**
  * 首页：状态总览 + 本机信息 + 重启区（v1.2.1 按已批准效
  * 果图保真重做，v1.2.2 补本机信息卡与大卡跳转）。
- * 顶部蓝色渐变状态大卡：激活状态与工具箱自检标记读到的
- * 真值一致（见 [ModuleActivation]），作用域个数读模块声
- * 明的作用域数组；整卡可点、点一下直接打开 LSPosed 管理
- * 器（小乐 v1.2.1 点名要的）。其下两张并排小卡（已启用功
+ * 顶部渐变状态大卡：激活三态走双信号真值（自检标记或
+ * 激活状态文件，见 [ActivationStatus]；旧版 hook 在跑
+ * 时是橙色中间态），作用域个数读模块声明的作用域数组；
+ * 整卡可点、点一下直接打开 LSPosed 管理器（小乐
+ * v1.2.1 点名要的）。其下两张并排小卡（已启用功
  * 能数、工具箱版本）；再下是「本机信息」卡（机型/系统版
  * 本/Android 版本/内核版本，全是真读的系统值）；「重启
  * 作用域」四行收进一张卡、行间细分割线、点行即执行——
@@ -626,7 +826,8 @@ private fun FloatingGlassBar(
 private fun HomeScreen(
     state: HomeState,
     syncHint: String?,
-    moduleActive: Boolean,
+    activationState: ActivationUiState,
+    activationFileVersion: Int?,
     scopeCount: Int,
     bottomInset: Dp,
     onOpenLsposed: () -> Unit,
@@ -660,13 +861,15 @@ private fun HomeScreen(
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 24.dp + bottomInset),
             ) {
-                // ── 状态大卡（蓝色渐变；未激活时转灰并如实提示）──
-                val heroBrush = if (moduleActive) {
-                    Brush.linearGradient(
+                // ── 状态大卡（激活=蓝；旧版 hook 在跑=橙；未激活=灰）──
+                val heroBrush = when (activationState) {
+                    ActivationUiState.Active -> Brush.linearGradient(
                         listOf(Color(0xFF2F7CF6), Color(0xFF4A9BF5)),
                     )
-                } else {
-                    Brush.linearGradient(
+                    ActivationUiState.ActiveOld -> Brush.linearGradient(
+                        listOf(Color(0xFFDD7E06), Color(0xFFF0A13C)),
+                    )
+                    ActivationUiState.Inactive -> Brush.linearGradient(
                         listOf(Color(0xFF75757A), Color(0xFF55555A)),
                     )
                 }
@@ -679,16 +882,24 @@ private fun HomeScreen(
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
                         Text(
-                            text = if (moduleActive) "模块运行中" else "模块未激活",
+                            text = when (activationState) {
+                                ActivationUiState.Active -> "模块运行中"
+                                ActivationUiState.ActiveOld -> "已激活 · 旧版运行中"
+                                ActivationUiState.Inactive -> "模块未激活"
+                            },
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
                         )
                         Text(
-                            text = if (moduleActive) {
-                                "LSPosed 已激活 · 作用域 $scopeCount 个进程"
-                            } else {
-                                "请在 LSPosed 里启用本模块 · 作用域 $scopeCount 个进程"
+                            text = when (activationState) {
+                                ActivationUiState.Active ->
+                                    "LSPosed 已激活 · 作用域 $scopeCount 个进程"
+                                ActivationUiState.ActiveOld ->
+                                    "作用域里跑的还是 versionCode ${activationFileVersion ?: "?"}" +
+                                        " 的 hook · 重启作用域后更新至本版"
+                                ActivationUiState.Inactive ->
+                                    "请在 LSPosed 里启用本模块 · 作用域 $scopeCount 个进程"
                             },
                             fontSize = 12.5.sp,
                             color = Color.White.copy(alpha = 0.85f),
