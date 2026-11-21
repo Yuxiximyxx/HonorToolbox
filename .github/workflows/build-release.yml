@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.2.1-release.apk
+          cp "$SRC" dist/HonorToolbox-1.2.2-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.2.1-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.2.2-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,28 +66,39 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.2.1
-          name: 荣耀工具箱 1.2.1
+          tag_name: v1.2.2
+          name: 荣耀工具箱 1.2.2
           body: |
-            ## 荣耀工具箱 1.2.1（界面保真修复）
+            ## 荣耀工具箱 1.2.2（三项修复）
 
-            本版只修界面呈现：功能、设置项、默认值与生效方式
-            一概不变，覆盖安装即可、配置不用重设。
+            功能、设置项、默认值与生效方式一概不变，覆盖
+            安装即可、配置不用重设。
 
-            **首页按效果图落地**
-            - 顶部蓝色状态大卡（模块运行状态、LSPosed 激活
-              与作用域个数都是真值）、已启用功能与机型两张
-              并排小卡、「重启作用域」四行收进带分割线的卡
-              片，整页卡片在灰底上清晰可见（上一版浅色下白
-              卡压白底、看起来像没卡片，这次一并修了）。
+            **修「模块未激活」误报 + 大卡可点跳 LSPosed**
+            - 上一版作用域声明漏了工具箱自身包名，LSPosed
+              不把模块注入工具箱自己的进程，激活自检永远
+              命中不了——模块明明在工作却报未激活。本版已
+              补上，大卡状态恢复真值。
+            - 首页状态大卡现在整卡可点，点一下直接打开
+              LSPosed 管理器。
 
-            **悬浮底栏换定版 Dock 配方**
-            - 宽度按栏目数自适应、四栏时接近满宽，不再缩成
-              中间一小条；高 68dp，强毛玻璃（栏下内容透出
-              明显模糊），选中项是深色药丸底配浅色图标文字。
-            - 「设置」页的悬浮/玻璃开关行为不变：关玻璃变
-              实色，关悬浮变贴底栏。
+            **首页加「本机信息」卡**
+            - 机型（营销名优先）、系统版本完整串、Android
+              版本与 API 级别、内核版本完整串，全部真读
+              系统值，与系统「关于手机」逐项对得上。原小
+              卡改为工具箱版本，不再两处写同一信息。
+
+            **悬浮底栏换三家同款液态玻璃**
+            - 自绘模糊方案废弃，换成泥坛/贴吧/酷安三家
+              fork 在用的 Kyant backdrop 真采样玻璃：饱和
+              →模糊→透镜折射→边缘高光，叠纱是三家默认的
+              磨砂档。宽度（栏数×88dp、封顶屏宽−32dp）、
+              68dp 高、选中深色药丸、玻璃关变实色、悬浮
+              关变贴底栏，行为都不变。
 
             ⚠️ 从旧版升级直接覆盖安装即可，配置不用重设。
+            装好后请在 LSPosed 里确认工具箱作用域包含它
+            自己（新装/首次升级会多出这一项，勾上并重启
+            一次工具箱即可）。
 
           files: dist/*.apk

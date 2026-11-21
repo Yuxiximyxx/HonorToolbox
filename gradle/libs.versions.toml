@@ -12,6 +12,8 @@ composeUiTooling = "1.10.4"
 composeMaterial3 = "1.4.0"
 miuix = "0.8.8"
 xposedApi = "82"
+kyantBackdrop = "2.0.1"
+kyantShapes = "1.2.1"
 
 [libraries]
 core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -26,6 +28,8 @@ compose-material3 = { module = "androidx.compose.material3:material3", version.r
 miuix = { module = "top.yukonga.miuix.kmp:miuix", version.ref = "miuix" }
 miuix-icons = { module = "top.yukonga.miuix.kmp:miuix-icons", version.ref = "miuix" }
 xposed-api = { module = "de.robv.android.xposed:api", version.ref = "xposedApi" }
+kyant-backdrop = { group = "io.github.kyant0", name = "backdrop", version.ref = "kyantBackdrop" }
+kyant-shapes = { group = "io.github.kyant0", name = "shapes", version.ref = "kyantShapes" }
 
 [plugins]
 agp-app = { id = "com.android.application", version.ref = "agp" }

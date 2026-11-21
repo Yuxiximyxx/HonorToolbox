@@ -1,10 +1,13 @@
 package io.github.yuxiximyxx.honortoolbox
 
 import android.app.Activity
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -48,28 +51,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.drawscope.translate
-import androidx.compose.ui.graphics.layer.GraphicsLayer
-import androidx.compose.ui.graphics.layer.drawLayer
-import androidx.compose.ui.graphics.rememberGraphicsLayer
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import com.kyant.backdrop.backdrops.LayerBackdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.colorControls
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.shapes.Capsule
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -88,8 +89,8 @@ import io.github.yuxiximyxx.honortoolbox.quickgesture.QuickGestureScreen
 import io.github.yuxiximyxx.honortoolbox.shadeclock.ShadeSettingsScreen
 import io.github.yuxiximyxx.honortoolbox.shadeclock.ThemeStore
 import io.github.yuxiximyxx.honortoolbox.shadeclock.makePrefsReadable
+import java.io.File
 import java.util.concurrent.TimeUnit
-import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -136,14 +137,17 @@ import top.yukonga.miuix.kmp.theme.ThemeController
  *   偏好 [AppSettings]，不碰任何功能配置通道）+ 关于入口。
  *
  * 底栏：悬浮开时是压在滚动内容之上的胶囊，内容可从栏下
- * 滚过；玻璃开时栏体用背景图层录制 + 高斯模糊自绘出真毛
- * 玻璃（miuix 0.8.8 的 FloatingNavigationBar 经源码核查只
- * 是实色背景、无任何模糊/背景采样能力，且其选中项只有加
- * 粗没有药丸底）。v1.2.1 按已定版的悬浮 Dock 配方重做：
+ * 滚过；玻璃开时栏体是 Kyant backdrop 真采样液态玻璃——
+ * 泥坛/贴吧/酷安三家 fork 悬浮 Dock 的同款配方（v1.2.2
+ * 接入，取代 v1.2.0–v1.2.1 的 GraphicsLayer 自绘模糊，
+ * 小乐真机批自绘版质感远不如三家）：内容层经
+ * layerBackdrop 录制，栏体 drawBackdrop 走「饱和 1.3 →
+ * 模糊 20dp → 透镜折射 20/6 → 边缘高光」效果链，叠纱用
+ * 三家默认磨砂档（深 #121212 α0.55 / 浅 #FAFAFA α0.58）。
  * 宽度按栏目数自适应（每栏固定槽宽、封顶屏宽减两侧各
- * 16dp）、高 68dp、强毛玻璃（大半径模糊 + 乳白/深色厚着
- * 色）、选中项是深色椭圆药丸底配浅色图标文字，栏内单元
- * 格一并自绘；悬浮关时改用库的贴底 NavigationBar。
+ * 16dp）、高 68dp、选中项是深色椭圆药丸底配浅色图标文字
+ * （单元格自绘）；玻璃关时同一胶囊变实色，悬浮关时改用
+ * 库的贴底 NavigationBar。
  *
  * 页面底色口径（v1.2.1）：各页 Scaffold 底色统一用
  * colorScheme.surface（浅色 #F7F7F7、夜间纯黑），卡片用
@@ -262,7 +266,9 @@ private fun ToolboxHost(
     val scope = rememberCoroutineScope()
     // 首页状态大卡的真值：激活状态走模块自检标记（见
     // ModuleActivation），作用域个数读模块声明的作用域数组。
-    val moduleActive = remember { ModuleActivation.isActive() }
+    // 标记在 ON_RESUME 时随 refresh 一并重读：用户刚在
+    // LSPosed 里启用完切回来（进程已被注入）能立刻翻状态。
+    var moduleActive by remember { mutableStateOf(ModuleActivation.isActive()) }
     val scopeCount = remember {
         context.resources.getStringArray(R.array.xposedscope).size
     }
@@ -275,6 +281,7 @@ private fun ToolboxHost(
     var syncHint by remember { mutableStateOf<String?>(null) }
 
     fun refresh() {
+        moduleActive = ModuleActivation.isActive()
         scope.launch {
             state = withContext(Dispatchers.IO) { loadHomeState(context) }
         }
@@ -364,6 +371,7 @@ private fun ToolboxHost(
                 moduleActive = moduleActive,
                 scopeCount = scopeCount,
                 bottomInset = bottomInset,
+                onOpenLsposed = { openLsposedManager(context) },
                 onRestartSystemUi = { restartSystemUi(context, scope) },
                 onRestartLauncher = { restartLauncher(context, scope) },
                 onForceStopServiceCenter = { forceStopServiceCenter(context, scope) },
@@ -419,39 +427,21 @@ private fun ToolboxHost(
     }
 
     if (floatingBar) {
-        // 背景图层：内容整层录制进 backdropLayer，悬浮栏在自
-        // 己的绘制里取栏下那一块做高斯模糊——内容是真的从
-        // 栏下滚过的（不预留实色底带），玻璃开时透出毛玻璃。
-        val backdropLayer = rememberGraphicsLayer()
-        var contentOrigin by remember { mutableStateOf(Offset.Zero) }
+        // 玻璃采样：内容整层经 Kyant 的 layerBackdrop 录制成
+        // 采样源，悬浮栏（内容 Box 的兄弟节点、不在录制子树
+        // 内，不会自采样）在自己的绘制里消费它做液态玻璃。
+        // 玻璃关时不录制、栏体走实色。
+        val backdrop = rememberLayerBackdrop()
         Box(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .onGloballyPositioned { contentOrigin = it.positionInRoot() }
-                    .then(
-                        if (glassBar) {
-                            Modifier.drawWithContent {
-                                backdropLayer.record(
-                                    density = this,
-                                    layoutDirection = layoutDirection,
-                                    size = IntSize(
-                                        size.width.roundToInt(),
-                                        size.height.roundToInt(),
-                                    ),
-                                ) { this@drawWithContent.drawContent() }
-                                drawLayer(backdropLayer)
-                            }
-                        } else {
-                            Modifier
-                        },
-                    ),
+                    .then(if (glassBar) Modifier.layerBackdrop(backdrop) else Modifier),
             ) {
                 TabContent()
             }
             FloatingGlassBar(
-                backdropLayer = backdropLayer,
-                contentOrigin = contentOrigin,
+                backdrop = backdrop,
                 glass = glassBar,
                 tab = tab,
                 onSelect = { selectTab(it) },
@@ -500,19 +490,18 @@ private val DOCK_SLOT_WIDTH = 88.dp
 private val DOCK_HEIGHT = 68.dp
 
 /**
- * 悬浮胶囊底栏（v1.2.1 按已定版 Dock 配方重做）：压在内容
- * 之上，宽度按栏目数自适应——栏数 × 固定槽宽，封顶为屏
- * 宽减两侧各 16dp，栏身居中；高 68dp。玻璃开时栏体是背
- * 景内容的大半径高斯模糊 + 厚着色（日间乳白、夜间深色，
- * 强毛玻璃口径）；玻璃关时是同一胶囊的实色版。选中项是
- * 深色椭圆药丸底 + 浅色图标文字（夜间反转为浅药丸深字，
- * 保证对比），未选中是前景弱色。单元格自绘：库的
- * FloatingNavigationBarItem 给不了定宽槽位与药丸配色。
+ * 悬浮胶囊底栏：压在内容之上，宽度按栏目数自适应——栏数
+ * × 固定槽宽，封顶为屏宽减两侧各 16dp，栏身居中；高
+ * 68dp。玻璃开时栏体是 Kyant backdrop 真采样液态玻璃
+ * （三家 fork 同款配方，见类注释）；玻璃关时是同一胶囊
+ * 的实色版。选中项是深色椭圆药丸底 + 浅色图标文字（夜
+ * 间反转为浅药丸深字，保证对比），未选中是前景弱色。
+ * 单元格自绘：库的 FloatingNavigationBarItem 给不了定
+ * 宽槽位与药丸配色。
  */
 @Composable
 private fun FloatingGlassBar(
-    backdropLayer: GraphicsLayer,
-    contentOrigin: Offset,
+    backdrop: LayerBackdrop,
     glass: Boolean,
     tab: ToolboxTab,
     onSelect: (ToolboxTab) -> Unit,
@@ -527,11 +516,12 @@ private fun FloatingGlassBar(
     val shape = RoundedCornerShape(percent = 50)
     val scheme = MiuixTheme.colorScheme
     val darkBar = scheme.surfaceContainer.luminance() < 0.5f
-    // 强毛玻璃着色：日间乳白厚罩、夜间深色厚罩
+    // 叠纱：三家定版的默认磨砂档（深 #121212 α0.55 / 浅
+    // #FAFAFA α0.58），绝不走厚乳纱路线。
     val glassTint = if (darkBar) {
-        scheme.surfaceContainer.copy(alpha = 0.58f)
+        Color(0xFF121212).copy(alpha = 0.55f)
     } else {
-        Color.White.copy(alpha = 0.68f)
+        Color(0xFFFAFAFA).copy(alpha = 0.58f)
     }
     val borderColor = if (darkBar) {
         Color.White.copy(alpha = 0.10f)
@@ -542,11 +532,6 @@ private fun FloatingGlassBar(
     val pillColor = scheme.onSurfaceContainer
     val pillContent = scheme.surfaceContainer
     val idleContent = scheme.onSurfaceVariantSummary
-    var barOrigin by remember { mutableStateOf(Offset.Zero) }
-    val blurLayer = rememberGraphicsLayer()
-    SideEffect {
-        blurLayer.renderEffect = BlurEffect(120f, 120f, TileMode.Clamp)
-    }
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -559,32 +544,26 @@ private fun FloatingGlassBar(
             modifier = Modifier
                 .width(DOCK_SLOT_WIDTH * tabs.size)
                 .height(DOCK_HEIGHT)
-                .onGloballyPositioned { barOrigin = it.positionInRoot() }
                 .shadow(elevation = 16.dp, shape = shape)
                 .then(
                     if (glass) {
                         Modifier
-                            .clip(shape)
-                            .drawWithContent {
-                                blurLayer.record(
-                                    density = this,
-                                    layoutDirection = layoutDirection,
-                                    size = IntSize(
-                                        size.width.roundToInt(),
-                                        size.height.roundToInt(),
-                                    ),
-                                ) {
-                                    translate(
-                                        -(barOrigin.x - contentOrigin.x),
-                                        -(barOrigin.y - contentOrigin.y),
-                                    ) {
-                                        drawLayer(backdropLayer)
-                                    }
-                                }
-                                drawLayer(blurLayer)
-                                drawRect(glassTint)
-                                drawContent()
-                            }
+                            .drawBackdrop(
+                                backdrop = backdrop,
+                                shape = { Capsule() },
+                                effects = {
+                                    colorControls(saturation = 1.3f)
+                                    blur(20.dp.toPx())
+                                    lens(
+                                        refractionHeight = 20.dp.toPx(),
+                                        refractionAmount = 6.dp.toPx(),
+                                        chromaticAberration = false,
+                                    )
+                                },
+                                highlight = { Highlight(alpha = 0.35f) },
+                                shadow = { null },
+                                onDrawSurface = { drawRect(glassTint) },
+                            )
                             .border(1.dp, borderColor, shape)
                     } else {
                         Modifier.background(scheme.surfaceContainer, shape)
@@ -631,13 +610,17 @@ private fun FloatingGlassBar(
 }
 
 /**
- * 首页：状态总览 + 重启区（v1.2.1 按已批准效果图保真重做）。
+ * 首页：状态总览 + 本机信息 + 重启区（v1.2.1 按已批准效
+ * 果图保真重做，v1.2.2 补本机信息卡与大卡跳转）。
  * 顶部蓝色渐变状态大卡：激活状态与工具箱自检标记读到的
  * 真值一致（见 [ModuleActivation]），作用域个数读模块声
- * 明的作用域数组；其下两张并排小卡（已启用功能数、机型/
- * 系统）；「重启作用域」四行收进一张卡、行间细分割线、
- * 点行即执行——全应用唯一的重启入口（右上角按钮与底部
- * 弹窗已撤除）；底部是停用旧模块的提示卡。
+ * 明的作用域数组；整卡可点、点一下直接打开 LSPosed 管理
+ * 器（小乐 v1.2.1 点名要的）。其下两张并排小卡（已启用功
+ * 能数、工具箱版本）；再下是「本机信息」卡（机型/系统版
+ * 本/Android 版本/内核版本，全是真读的系统值）；「重启
+ * 作用域」四行收进一张卡、行间细分割线、点行即执行——
+ * 全应用唯一的重启入口（右上角按钮与底部弹窗已撤除）；
+ * 底部是停用旧模块的提示卡。
  */
 @Composable
 private fun HomeScreen(
@@ -646,6 +629,7 @@ private fun HomeScreen(
     moduleActive: Boolean,
     scopeCount: Int,
     bottomInset: Dp,
+    onOpenLsposed: () -> Unit,
     onRestartSystemUi: () -> Unit,
     onRestartLauncher: () -> Unit,
     onForceStopServiceCenter: () -> Unit,
@@ -690,7 +674,8 @@ private fun HomeScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
-                        .background(heroBrush),
+                        .background(heroBrush)
+                        .clickable { onOpenLsposed() },
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
                         Text(
@@ -714,7 +699,7 @@ private fun HomeScreen(
 
                 Spacer(Modifier.height(10.dp))
 
-                // ── 两张并排小卡：已启用功能 / 机型 ──
+                // ── 两张并排小卡：已启用功能 / 工具箱版本 ──
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -756,23 +741,36 @@ private fun HomeScreen(
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
                             Text(
-                                text = "机型",
+                                text = "工具箱版本",
                                 fontSize = 12.sp,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                             )
                             Text(
-                                text = Build.MODEL,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(top = 5.dp),
-                            )
-                            Text(
-                                text = systemVersionLabel(),
-                                fontSize = 11.5.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                text = BuildConfig.VERSION_NAME,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(top = 2.dp),
                             )
                         }
                     }
+                }
+
+                // ── 本机信息卡（机型/系统版本/Android/内核，全真值）──
+                SmallTitle(
+                    text = "本机信息",
+                    insideMargin = PaddingValues(start = 4.dp, top = 16.dp),
+                )
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    DeviceInfoRow("机型", deviceModelLabel())
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    DeviceInfoRow("系统版本", fullSystemVersion())
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    DeviceInfoRow(
+                        "Android 版本",
+                        "${Build.VERSION.RELEASE} · API ${Build.VERSION.SDK_INT}",
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    DeviceInfoRow("内核版本", kernelVersion())
                 }
 
                 if (syncHint != null) {
@@ -828,20 +826,92 @@ private fun HomeScreen(
     }
 }
 
+/** 读系统属性（反射 SystemProperties.get），读不到返回 null。 */
+private fun systemProp(key: String): String? = runCatching {
+    val cls = Class.forName("android.os.SystemProperties")
+    cls.getMethod("get", String::class.java).invoke(null, key) as? String
+}.getOrNull()?.takeIf { it.isNotBlank() }
+
 /**
- * 系统版本文案：优先读荣耀的 MagicOS 版本系统属性（真机
- * 有什么读什么），读不到回退 Android 版本号，不编造。
+ * 机型文案：营销名优先（ro.product.marketname 等，荣耀机
+ * 上能读到如 Magic7 Pro），读不到回退 Build.MODEL；两者
+ * 不同时并排给出，避免只剩一串型号代码。
  */
-private fun systemVersionLabel(): String {
-    fun prop(key: String): String? = runCatching {
-        val cls = Class.forName("android.os.SystemProperties")
-        cls.getMethod("get", String::class.java).invoke(null, key) as? String
-    }.getOrNull()?.takeIf { it.isNotBlank() }
-    prop("ro.build.version.magic")?.let {
-        return if (it.contains("MagicOS")) it else "MagicOS $it"
+private fun deviceModelLabel(): String {
+    val market = systemProp("ro.product.marketname")
+        ?: systemProp("ro.product.odm.marketname")
+        ?: systemProp("ro.config.marketing_name")
+    val model = Build.MODEL
+    return when {
+        market == null || market == model -> model
+        else -> "$market（$model）"
     }
-    prop("ro.build.version.emui")?.let { return it }
-    return "Android ${Build.VERSION.RELEASE}"
+}
+
+/**
+ * 系统版本完整串：ro.build.display.id 优先（真机形如
+ * 11.0.0.117(SP2C00E117R102P1H1)，与系统「关于手机」的
+ * 版本号一行同源），读不到回退 Build.DISPLAY 原值。
+ */
+private fun fullSystemVersion(): String =
+    systemProp("ro.build.display.id") ?: Build.DISPLAY
+
+/**
+ * 内核版本完整串：/proc/version 首行优先（整串，与系统
+ * 「关于手机」的内核版本一行同源），读不到回退
+ * os.version 系统属性（短串）。内容只截取不改写。
+ */
+private fun kernelVersion(): String {
+    runCatching { File("/proc/version").readText().trim() }
+        .getOrNull()
+        ?.takeIf { it.isNotBlank() }
+        ?.let { return it }
+    return System.getProperty("os.version")?.takeIf { it.isNotBlank() } ?: "未知"
+}
+
+/** 本机信息卡的一行：项名在上、真值在下（值串普遍较长，不挤一行）。 */
+@Composable
+private fun DeviceInfoRow(label: String, value: String) {
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        )
+        Text(
+            text = value,
+            fontSize = 13.5.sp,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+    }
+}
+
+/**
+ * 打开 LSPosed 管理器：优先走它的桌面启动 Intent，取不
+ * 到就直指其主界面组件，再取不到退到它的应用详情页，
+ * 全失败给 Toast。三段都失败的典型原因是管理器被隐藏
+ * 或寄生在别的宿主里，此时提示去 LSPosed 寄主里找。
+ */
+private fun openLsposedManager(context: Context) {
+    val pkg = "org.lsposed.manager"
+    val launched = runCatching {
+        val intent = context.packageManager.getLaunchIntentForPackage(pkg)
+            ?: Intent().apply {
+                component = ComponentName(pkg, "org.lsposed.manager.ui.activity.MainActivity")
+            }
+        context.startActivity(intent)
+    }.isSuccess
+    if (launched) return
+    val detailOpened = runCatching {
+        context.startActivity(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$pkg")
+            },
+        )
+    }.isSuccess
+    if (!detailOpened) {
+        Toast.makeText(context, "没找到 LSPosed 管理器", Toast.LENGTH_SHORT).show()
+    }
 }
 
 /** 首页重启区的一行：点行直接执行，行尾一个重启图标示意可点。 */

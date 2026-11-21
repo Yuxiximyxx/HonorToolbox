@@ -24,8 +24,8 @@ android {
         applicationId = "io.github.yuxiximyxx.honortoolbox"
         minSdk = 34   // Android 14 (MagicOS 8 起，与 MagicPods 一致)
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.2.1"
+        versionCode = 8
+        versionName = "1.2.2"
     }
 
     signingConfigs {
@@ -213,4 +213,15 @@ dependencies {
     // Miuix UI（MIUIX 统一风格）：工具链与 MagicPods v2.11 一致
     implementation("top.yukonga.miuix.kmp:miuix:0.8.8")
     implementation("top.yukonga.miuix.kmp:miuix-icons:0.8.8")
+
+    // Kyant Backdrop（液态玻璃真采样）：泥坛/贴吧/酷安三家
+    // fork 的悬浮 Dock 同款（backdrop 2.0.1）。其 POM 依赖
+    // kotlin-stdlib 2.4.10（与本仓一致）与 JB Compose 1.12
+    // 薄壳——后者在 Android 上桥接 androidx Compose，泥坛
+    // LumaGA 在与本仓相同的 BOM 2026.05.00（Compose UI
+    // 1.10.4）下已实证共存，本仓照同一路径接入。shapes 仅
+    // 是 backdrop 的 runtime 依赖、用 Capsule 需显式声明
+    // （贴吧 fork 同款处理）。
+    implementation("io.github.kyant0:backdrop:2.0.1")
+    implementation("io.github.kyant0:shapes:1.2.1")
 }
