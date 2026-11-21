@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.yuxiximyxx.honortoolbox.R
@@ -56,18 +57,18 @@ data class NightIconUiState(
  * 「桌面 · 图标日夜切换」设置页（原 NightIcon 设置页的功能项
  * 按工具箱统一 MIUIX 呈现重排，设置项/默认值不变）：
  * 总开关、白天/夜间主题选择、状态、立即应用（「重启桌面」
- * 自工具箱 v1.0.1 起集中到工具箱首页右上角，本页只留提示）。
+ * 自工具箱 v1.0.1 起集中到工具箱首页（v1.2.0 起是首页「重启作用域」列表），本页只留提示）。
  * 与原版的差别只在通道：下发由 libxposed 远程偏好/远程文件
  * 改为落盘 /sdcard/Download/HonorToolbox/nighticon/（见
  * [NightIconStore]）；本地展示镜像偏好改名 nighticon_settings
  * （原版叫 settings，与工具箱内其他功能的镜像键冲突）。
  * 原版的「关于」行并入工具箱统一关于页，本页不再单列。
  *
- * v1.1.0：原独立 Activity 已并入工具箱单 Activity 宿主，本页
- * 是「桌面」栏整页（[NightIconScreen]）；原 Activity 级状态机
- * 整体搬到 [NightIconController]（宿主持有一份，选主题文件
- * 的结果由宿主 onActivityResult 转交它），本页只剩纯 UI。
- * 栏根页不放返回箭头（onBack 传 null）。
+ * v1.1.0：原独立 Activity 已并入工具箱单 Activity 宿主；原
+ * Activity 级状态机整体搬到 [NightIconController]（宿主持
+ * 有一份，选主题文件的结果由宿主 onActivityResult 转交
+ * 它），本页只剩纯 UI。v1.2.0 起本页是「系统」页内桌面组
+ * 的子页，宿主传 onBack 显示返回箭头回系统页总览。
  */
 
 @Composable
@@ -78,6 +79,7 @@ internal fun NightIconScreen(
     onPickLight: () -> Unit,
     onPickDark: () -> Unit,
     onApply: () -> Unit,
+    bottomInset: Dp = 0.dp,
 ) {
     Scaffold(
         containerColor = MiuixTheme.colorScheme.background,
@@ -104,7 +106,7 @@ internal fun NightIconScreen(
             Column(
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
-                    .padding(bottom = 24.dp),
+                    .padding(bottom = 24.dp + bottomInset),
             ) {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     SuperSwitch(
@@ -181,7 +183,7 @@ internal fun NightIconScreen(
                     )
                 }
                 Text(
-                    text = "需要重启桌面时，回工具箱首页、点右上角的重启按钮，选「重启桌面」。",
+                    text = "需要重启桌面时，回工具箱首页，在「重启作用域」里点「重启桌面」。",
                     fontSize = 13.sp,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                     modifier = Modifier.padding(start = 4.dp, top = 12.dp, end = 4.dp),

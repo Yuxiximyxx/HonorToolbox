@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -75,7 +76,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * v2.0.12 加「重启系统界面」按钮（写 restart.txt 请求标记，
  * SystemUI 侧看守读到后结束自己进程被系统拉起，等同强停、
  * 不依赖 root，省得每次验版手动强停）。工具箱 v1.0.1 起该
- * 按钮撤出本页、集中到工具箱首页右上角的重启菜单（写
+ * 按钮撤出本页、集中到工具箱首页的「重启作用域」列表（写
  * restart.txt 的实现不变，仍是 ThemeStore.writeRestartRequest）。
  * 覆盖层相关设置经 stamp.txt（公共 Download 目录）传给 SystemUI
  * 侧，切换免强停；字号仍走 SharedPreferences「settings」，由 hook
@@ -85,7 +86,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * 分组被小乐以「不 miuix、不美观」否决；miuix 0.8.8 本身也
  * 没有官方折叠/可展开分节组件）——主页只留版本说明卡、一列
  * SuperArrow 入口（主题管理/位置/显示与开关/原系统头部/说
- * 明）与一行重启提示（按钮在工具箱首页右上角），每组点进独立子页
+ * 明）与一行重启提示（入口在工具箱首页「重启作用域」），每组点进独立子页
  * （SmallTopAppBar+返回、Card 分组、组件全用 miuix 词汇）。
  * 设置项、存储键、戳记格式一律未动；v2.0.24 的 ui_section_*
  * 展开状态键弃用、打开时清掉。
@@ -153,7 +154,10 @@ private fun BackNavigationIcon(onClick: () -> Unit) {
 }
 
 @Composable
-internal fun ShadeSettingsScreen() {
+internal fun ShadeSettingsScreen(
+    onExit: (() -> Unit)? = null,
+    bottomInset: Dp = 0.dp,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val prefs = remember {
@@ -481,9 +485,12 @@ internal fun ShadeSettingsScreen() {
                 title = pageTitle,
                 color = Color.Transparent,
                 navigationIcon = {
-                    // 栏根页（主页）不放返回箭头；子页返回主页
+                    // 子页返回主页；主页在宿主里是「系统」页的子页，
+                    // 宿主给了 onExit 时主页也放返回箭头回系统页总览
                     if (page != PAGE_HOME) {
                         BackNavigationIcon { page = PAGE_HOME }
+                    } else if (onExit != null) {
+                        BackNavigationIcon { onExit() }
                     }
                 },
             )
@@ -504,7 +511,7 @@ internal fun ShadeSettingsScreen() {
             Column(
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
-                    .padding(bottom = 24.dp),
+                    .padding(bottom = 24.dp + bottomInset),
             ) {
                 when (page) {
                     PAGE_THEMES -> {
@@ -1005,7 +1012,7 @@ internal fun ShadeSettingsScreen() {
                             }
                         }
                         Text(
-                            "需要重启系统界面时（比如改了原头部字号），回工具箱首页、点右上角的重启按钮，选「重启系统界面」。",
+                            "需要重启系统界面时（比如改了原头部字号），回工具箱首页，在「重启作用域」里点「重启系统界面」。",
                             fontSize = 13.sp,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                             modifier = Modifier.padding(start = 4.dp, top = 16.dp, end = 4.dp),

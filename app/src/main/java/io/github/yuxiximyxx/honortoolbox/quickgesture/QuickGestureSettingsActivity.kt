@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -73,7 +74,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * 不静默（HonorShadeClock 戳记通道的教训）。
  *
  * v1.1.0：原独立 Activity 已并入工具箱单 Activity 宿主，本页
- * 是「手势与唤醒」栏内的子页（[QuickGestureScreen]），主题与
+ * 是「系统」页内的子页（[QuickGestureScreen]），主题与
  * 状态栏图标明暗由宿主统一提供；本页原本没有 onCreate 级
  * 配置绑定（组合时读偏好 + 首组合落盘自愈），维持原样。
  */
@@ -137,7 +138,7 @@ private fun rememberAppIcon(pkg: String): ImageBitmap? {
 }
 
 @Composable
-internal fun QuickGestureScreen(onExit: () -> Unit) {
+internal fun QuickGestureScreen(onExit: () -> Unit, bottomInset: Dp = 0.dp) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val prefs = remember {
@@ -148,7 +149,7 @@ internal fun QuickGestureScreen(onExit: () -> Unit) {
     BackHandler(enabled = page != PAGE_HOME) {
         page = if (page == PAGE_ACTIVITIES) PAGE_APPS else PAGE_HOME
     }
-    // 栏内子页：主页层级按返回 = 回「手势与唤醒」栏索引
+    // 子页：主页层级按返回 = 回「系统」页总览
     BackHandler(enabled = page == PAGE_HOME) { onExit() }
 
     var config by remember {
@@ -237,6 +238,7 @@ internal fun QuickGestureScreen(onExit: () -> Unit) {
         when (page) {
             PAGE_APPS -> AppListPage(
                 modifier = Modifier.fillMaxSize().padding(innerPadding),
+                bottomInset = bottomInset,
                 apps = appList,
                 query = appQuery,
                 onQueryChange = { appQuery = it },
@@ -248,6 +250,7 @@ internal fun QuickGestureScreen(onExit: () -> Unit) {
             )
             PAGE_ACTIVITIES -> ActivityListPage(
                 modifier = Modifier.fillMaxSize().padding(innerPadding),
+                bottomInset = bottomInset,
                 pkg = pendingPkg ?: "",
                 activities = activityList,
                 current = config,
@@ -277,6 +280,7 @@ internal fun QuickGestureScreen(onExit: () -> Unit) {
                     .fillMaxSize()
                     .padding(innerPadding)
                     .verticalScroll(rememberScrollState()),
+                bottomInset = bottomInset,
                 config = config,
                 syncError = syncError,
                 onEnabledChange = { persist(config.copy(enabled = it)) },
@@ -292,6 +296,7 @@ internal fun QuickGestureScreen(onExit: () -> Unit) {
 @Composable
 private fun HomePage(
     modifier: Modifier,
+    bottomInset: Dp = 0.dp,
     config: GestureConfig,
     syncError: String?,
     onEnabledChange: (Boolean) -> Unit,
@@ -389,7 +394,7 @@ private fun HomePage(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     "1. 在荣耀快服务里打开「荣耀快服务快捷手势」（快服务的设置 → 手势设置）。\n" +
-                        "2. 在 LSPosed 里给荣耀工具箱勾选「荣耀快服务」作用域；然后回工具箱首页、点右上角重启菜单里的「强停快服务」让它生效。\n" +
+                        "2. 在 LSPosed 里给荣耀工具箱勾选「荣耀快服务」作用域；然后回工具箱首页，在「重启作用域」里点「强停快服务」让它生效。\n" +
                         "3. 在这里打开改向开关、选好目标。改目标即时生效，不用重启。",
                     fontSize = 13.sp,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -402,7 +407,7 @@ private fun HomePage(
                 fontSize = 12.sp,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(24.dp + bottomInset))
         }
     }
 }
@@ -410,6 +415,7 @@ private fun HomePage(
 @Composable
 private fun AppListPage(
     modifier: Modifier,
+    bottomInset: Dp = 0.dp,
     apps: List<AppEntry>?,
     query: String,
     onQueryChange: (String) -> Unit,
@@ -440,7 +446,10 @@ private fun AppListPage(
                 it.label.contains(query, ignoreCase = true) ||
                 it.pkg.contains(query, ignoreCase = true)
         }
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = bottomInset),
+        ) {
             items(filtered, key = { it.pkg }) { entry ->
                 AppRow(entry = entry, selected = entry.pkg == selectedPkg) {
                     onPick(entry)
@@ -491,6 +500,7 @@ private fun AppRow(entry: AppEntry, selected: Boolean, onClick: () -> Unit) {
 @Composable
 private fun ActivityListPage(
     modifier: Modifier,
+    bottomInset: Dp = 0.dp,
     pkg: String,
     activities: List<ActivityEntry>?,
     current: GestureConfig,
@@ -506,7 +516,10 @@ private fun ActivityListPage(
         }
     }
     Column(modifier = modifier) {
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = bottomInset),
+        ) {
             item(key = "app-mode") {
                 Row(
                     modifier = Modifier

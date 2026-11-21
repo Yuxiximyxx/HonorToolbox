@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.yuxiximyxx.honortoolbox.navwake.config.AppTargets
 import io.github.yuxiximyxx.honortoolbox.navwake.config.NavConfig
@@ -47,19 +48,20 @@ import top.yukonga.miuix.kmp.utils.scrollEndHaptic
  * 写入路径与原版同构：本地镜像 prefs + 同步落盘 navwake.txt（原版是远程 prefs）。
  *
  * v1.1.0：原独立 Activity 已并入工具箱单 Activity 宿主，本页
- * 是「手势与唤醒」栏内的子页（[NavWakeScreen]，选应用页仍是
+ * 是「系统」页内的子页（[NavWakeScreen]，选应用页仍是
  * 页内子页）；原 onCreate 里的 NavConfig.bind(镜像偏好) +
  * onChanged 落盘回调已迁移到宿主 MainActivity.onCreate，
  * 宿主启动时即绑定、与逐页打开等价。主题由宿主统一提供。
  */
 @Composable
-internal fun NavWakeScreen(onBack: () -> Unit) {
+internal fun NavWakeScreen(onBack: () -> Unit, bottomInset: Dp = 0.dp) {
     val context = LocalContext.current
         var rev by remember { mutableStateOf(0) }
         var picking by remember { mutableStateOf(false) }
         if (picking) {
             AppPickerScreen(
-                onDone = { picking = false; rev++ }
+                onDone = { picking = false; rev++ },
+                bottomInset = bottomInset,
             )
             return
         }
@@ -85,7 +87,7 @@ internal fun NavWakeScreen(onBack: () -> Unit) {
                     .padding(top = padding.calculateTopPadding())
                     .overScrollVertical()
                     .scrollEndHaptic(),
-                contentPadding = PaddingValues(bottom = 24.dp)
+                contentPadding = PaddingValues(bottom = 24.dp + bottomInset)
             ) {
                 item {
                     SmallTitle(text = "长按重定向")
@@ -107,7 +109,7 @@ internal fun NavWakeScreen(onBack: () -> Unit) {
                                 summary = "关闭后完全恢复原 YOYO 行为，可随时打开"
                             )
                             BasicComponent(
-                                summary = "改完这个开关，要回工具箱首页点右上角的重启按钮、选「重启系统界面」才会生效"
+                                summary = "改完这个开关，要回工具箱首页，在「重启作用域」里点「重启系统界面」才会生效"
                             )
                         }
                     }
@@ -241,7 +243,7 @@ internal fun NavWakeScreen(onBack: () -> Unit) {
     }
 
     @Composable
-    private fun AppPickerScreen(onDone: () -> Unit) {
+    private fun AppPickerScreen(onDone: () -> Unit, bottomInset: Dp = 0.dp) {
         val context = LocalContext.current
         val apps = remember { AppTargets.launchableApps(context, context.packageName) }
         var checked by remember {
@@ -268,7 +270,8 @@ internal fun NavWakeScreen(onBack: () -> Unit) {
                     modifier = Modifier
                         .weight(1f)
                         .overScrollVertical()
-                        .scrollEndHaptic()
+                        .scrollEndHaptic(),
+                    contentPadding = PaddingValues(bottom = bottomInset),
                 ) {
                     items(apps) { app ->
                         val isChecked = app.pkg in checked

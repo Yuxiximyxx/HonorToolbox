@@ -209,7 +209,7 @@ class NightIconController(private val activity: ComponentActivity) {
     }
 
     // 「重启桌面」按钮自工具箱 v1.0.1 起撤出本页、集中到工具箱
-    // 首页右上角的重启菜单（实现在 MainActivity，同机制：root
+    // 首页「重启作用域」列表（实现在 MainActivity，同机制：root
     // 强停优先、无 root 写 restart_token 兜底）。
 
     /** 落盘配置还不存在时，用本地镜像拼一份（版本号以已下发为准，未下发记 0）。 */
