@@ -109,6 +109,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import io.github.yuxiximyxx.honortoolbox.libraryplus.LibraryPlusScreen
 import io.github.yuxiximyxx.honortoolbox.magicpods.EarphoneDetailActivity
+import io.github.yuxiximyxx.honortoolbox.magicxm4.EarphoneDetailActivity as Xm4EarphoneDetailActivity
 import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeScreen
 import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeStore
 import io.github.yuxiximyxx.honortoolbox.navwake.config.NavConfig
@@ -484,6 +485,11 @@ private fun ToolboxHost(
                     onOpenEarphone = {
                         context.startActivity(
                             Intent(context, EarphoneDetailActivity::class.java),
+                        )
+                    },
+                    onOpenXm4 = {
+                        context.startActivity(
+                            Intent(context, Xm4EarphoneDetailActivity::class.java),
                         )
                     },
                 )
@@ -1441,6 +1447,7 @@ private fun SystemScreen(
     onOpenNightIcon: () -> Unit,
     onOpenLibraryPlus: () -> Unit,
     onOpenEarphone: () -> Unit,
+    onOpenXm4: () -> Unit,
 ) {
     Scaffold(
         containerColor = MiuixTheme.colorScheme.surface,
@@ -1526,9 +1533,10 @@ private fun SystemScreen(
                         summary = "MagicPods：电量、降噪、EQ、手势与固件（v1.4.0 合入）",
                         onClick = onOpenEarphone,
                     )
-                    PlaceholderRow(
+                    SuperArrow(
                         title = "索尼 WH-1000XM4 设备中心",
-                        summary = "下一阶段合入",
+                        summary = "MagicXM4：电量、降噪、EQ 与固件（v1.5.0 合入）",
+                        onClick = onOpenXm4,
                     )
                 }
 

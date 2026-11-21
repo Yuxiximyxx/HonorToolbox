@@ -8,6 +8,7 @@ import de.robv.android.xposed.callbacks.XC_InitPackageResources
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 import io.github.yuxiximyxx.honortoolbox.libraryplus.hook.LibraryPlusHook
 import io.github.yuxiximyxx.honortoolbox.magicpods.hook.MagicPodsHook
+import io.github.yuxiximyxx.honortoolbox.magicxm4.hook.MagicXm4Hook
 import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeHook
 import io.github.yuxiximyxx.honortoolbox.nighticon.NightIconHook
 import io.github.yuxiximyxx.honortoolbox.quickgesture.QuickGestureHook
@@ -64,6 +65,9 @@ class ToolboxHook : IXposedHookLoadPackage, IXposedHookInitPackageResources {
                 // MagicPods（v1.4.0 合入）：状态栏耳机图标 + 控制中心
                 // 降噪卡的 systemui 双装路径（原版同款，见 MagicPodsHook）
                 MagicPodsHook.install(lpparam)
+                // MagicXM4（v1.5.0 合入）：与 MagicPods 并行装载同一
+                // 双装路径，各自按本方设备身份过滤，互不干扰
+                MagicXm4Hook.install(lpparam)
             }
             "com.android.bluetooth",
             "com.hihonor.audioaccessorymanager",
@@ -72,6 +76,10 @@ class ToolboxHook : IXposedHookLoadPackage, IXposedHookInitPackageResources {
                 // MagicPods（v1.4.0 合入）：蓝牙协议/设备中心卡片/
                 // 荣耀耳机面板/SWS 占位，宿主分发在 MagicPodsHook 内
                 MagicPodsHook.install(lpparam)
+                // MagicXM4（v1.5.0 合入）：与 MagicPods 并行装载；
+                // 蓝牙进程内两台耳机的分发合并口径见 MagicXm4Hook
+                // 文件头（谓词互斥、键前缀与 SPP 通道隔离）
+                MagicXm4Hook.install(lpparam)
             }
             "com.hihonor.systemui",
             "com.hihonor.magicvoice",

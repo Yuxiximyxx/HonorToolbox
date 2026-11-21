@@ -108,6 +108,27 @@
             </intent-filter>
         </service>
 
+        <!-- MagicXM4 耳机详情页（v1.5.0 合入）：控制中心卡片
+             点击经 setClassName 直达本 Activity，必须 exported
+             （原 MagicXM4 同款声明，主题沿用其 DeviceDefault） -->
+        <activity
+            android:name=".magicxm4.EarphoneDetailActivity"
+            android:exported="true"
+            android:label="WH-1000XM4"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+
+        <!-- MagicXM4 控制中心降噪快捷磁贴（原 MagicXM4 同款） -->
+        <service
+            android:name=".magicxm4.hook.QuickSettingsAncTile"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="MagicXM4"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <!-- 资源库增强的配置 Provider（原 LibraryPlus 同款，authority
              随工具箱包名改名）：被 hook 进程读配置、上报生效状态。 -->
         <provider

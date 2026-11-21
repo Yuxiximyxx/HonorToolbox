@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">荣耀工具箱</string>
+    <!-- MagicXM4 详情页标题（v1.5.0 合入，原 MagicXM4 同名资源） -->
+    <string name="detail_device_name">WH-1000XM4</string>
     <string name="app_subtitle">荣耀 MagicOS 功能合集：手势改向、通知中心主题、桌面图标日夜切换等</string>
 
     <!-- 作用域：SystemUI（通知中心主题 + 导航条唤醒）、快服务
