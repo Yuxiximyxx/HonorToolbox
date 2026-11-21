@@ -38,7 +38,7 @@ class ToolboxHook : IXposedHookLoadPackage, IXposedHookInitPackageResources {
         if (lpparam.packageName == "io.github.yuxiximyxx.honortoolbox") {
             runCatching {
                 XposedHelpers.findAndHookMethod(
-                    ModuleActivation::class.java,
+                    "io.github.yuxiximyxx.honortoolbox.ModuleActivation",
                     lpparam.classLoader,
                     "isActive",
                     object : XC_MethodHook() {
