@@ -24,8 +24,10 @@ android {
         applicationId = "io.github.yuxiximyxx.honortoolbox"
         minSdk = 34   // Android 14 (MagicOS 8 起，与 MagicPods 一致)
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.2.3"
+        versionCode = 10
+        versionName = "1.3.0"
+        // 资源库增强（LibraryPlus 合入）带 DexKit 原生库，只留 arm64
+        ndk { abiFilters += listOf("arm64-v8a") }
     }
 
     signingConfigs {
@@ -223,5 +225,9 @@ dependencies {
     // 是 backdrop 的 runtime 依赖、用 Capsule 需显式声明
     // （贴吧 fork 同款处理）。
     implementation("io.github.kyant0:backdrop:2.0.1")
+
+    // DexKit（资源库增强合入）：hook 侧按字符串定位混淆类，
+    // 找不到目标时各 hook 自带硬编码类名兜底（原 LibraryPlus 同款）
+    implementation("org.luckypray:dexkit:2.3.0")
     implementation("io.github.kyant0:shapes:1.2.1")
 }

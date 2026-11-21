@@ -32,6 +32,14 @@
         </intent>
     </queries>
 
+    <!-- 资源库增强（LibraryPlus 合入）：只有同签名的应用能发送
+         配置变更 / 重启作用域广播（原独立版同款 signature 权限，
+         随工具箱包名改名，见 libraryplus/LpConfig.kt 的 Const）。 -->
+    <permission
+        android:name="io.github.yuxiximyxx.honortoolbox.permission.CONFIG"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="io.github.yuxiximyxx.honortoolbox.permission.CONFIG" />
+
     <application
         android:label="@string/app_name"
         android:description="@string/app_subtitle"
@@ -72,19 +80,30 @@
 
 
 
+        <!-- 资源库增强的配置 Provider（原 LibraryPlus 同款，authority
+             随工具箱包名改名）：被 hook 进程读配置、上报生效状态。 -->
+        <provider
+            android:name=".libraryplus.ConfigProvider"
+            android:authorities="io.github.yuxiximyxx.honortoolbox.config"
+            android:exported="true" />
+
         <!-- Xposed Module 声明（传统 API） -->
         <meta-data
             android:name="xposedmodule"
             android:value="true" />
         <meta-data
             android:name="xposeddescription"
-            android:value="荣耀工具箱：MagicOS 功能合集——快服务手势改向、长按导航条唤醒改向、通知中心主题（锁屏主题样式渲染）、桌面图标随日夜切换。" />
+            android:value="荣耀工具箱：MagicOS 功能合集——快服务手势改向、长按导航条唤醒改向、通知中心主题（锁屏主题样式渲染）、桌面图标随日夜切换、资源库增强与荣耀搜索净化。" />
         <meta-data
             android:name="xposedminversion"
             android:value="82" />
         <meta-data
             android:name="xposedscope"
             android:resource="@array/xposedscope" />
+        <!-- 资源库增强经 LSPosed new-xshared 下发配置（原 LibraryPlus 同款声明） -->
+        <meta-data
+            android:name="xposedsharedprefs"
+            android:value="true" />
     </application>
 
 </manifest>

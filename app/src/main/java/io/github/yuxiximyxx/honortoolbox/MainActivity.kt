@@ -13,7 +13,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.EaseOut
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -40,6 +45,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
@@ -60,7 +70,21 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.util.fastFirstOrNull
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -77,10 +101,13 @@ import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.colorControls
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.InnerShadow
+import com.kyant.backdrop.shadow.Shadow
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
+import io.github.yuxiximyxx.honortoolbox.libraryplus.LibraryPlusScreen
 import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeScreen
 import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeStore
 import io.github.yuxiximyxx.honortoolbox.navwake.config.NavConfig
@@ -97,7 +124,12 @@ import io.github.yuxiximyxx.honortoolbox.shadeclock.ThemeStore
 import io.github.yuxiximyxx.honortoolbox.shadeclock.makePrefsReadable
 import java.io.File
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 import kotlin.math.min
+import kotlin.math.roundToInt
+import kotlin.math.sign
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -275,7 +307,7 @@ class MainActivity : ComponentActivity() {
 private enum class ToolboxTab { Home, System, Apps, Settings }
 
 /** 「系统」页内部页：分组总览 / 四个功能的完整设置子页。 */
-private enum class SystemPage { Root, QuickGesture, NavWake, Shade, NightIcon }
+private enum class SystemPage { Root, QuickGesture, NavWake, Shade, NightIcon, LibraryPlus }
 
 /** 首页大卡的激活三态（v1.2.3）：已激活 / 旧版 hook 还在跑 / 未激活。 */
 private enum class ActivationUiState { Active, ActiveOld, Inactive }
@@ -447,6 +479,7 @@ private fun ToolboxHost(
                     onOpenNavWake = { systemPage = SystemPage.NavWake },
                     onOpenShade = { systemPage = SystemPage.Shade },
                     onOpenNightIcon = { systemPage = SystemPage.NightIcon },
+                    onOpenLibraryPlus = { systemPage = SystemPage.LibraryPlus },
                 )
                 SystemPage.QuickGesture -> QuickGestureScreen(
                     onExit = { systemPage = SystemPage.Root },
@@ -458,6 +491,10 @@ private fun ToolboxHost(
                 )
                 SystemPage.Shade -> ShadeSettingsScreen(
                     onExit = { systemPage = SystemPage.Root },
+                    bottomInset = bottomInset,
+                )
+                SystemPage.LibraryPlus -> LibraryPlusScreen(
+                    onBack = { systemPage = SystemPage.Root },
                     bottomInset = bottomInset,
                 )
                 SystemPage.NightIcon -> NightIconScreen(
@@ -632,7 +669,8 @@ private fun DrawScope.drawDockHalo(haloBase: Color) {
 }
 
 /**
- * 悬浮胶囊底栏（v1.2.3 按泥坛现行实现逐参数对齐）：
+ * 悬浮胶囊底栏（v1.2.3 按泥坛现行实现逐参数对齐，v1.3.0 补齐
+ * 药丸拖动移植）：
  *
  * - 几何：高 68dp；宽 = 栏数 × 72dp 槽宽 + 两侧 6dp 内
  *   边距，封顶屏宽 −32dp 与 380dp；放置是居中 + 先吃
@@ -643,13 +681,30 @@ private fun DrawScope.drawDockHalo(haloBase: Color) {
  *   透镜 24/24 带色散，高光 1.0 × 0.85（泥坛外壳系数
  *   DockLiquidHighlightScale）；外壳边缘走 aligned
  *   surround（双峰边缘 + 八层光晕 + 定色 10dp 投影）。
+ *   LIQUID 全表与 v1.2.3 一字未动。
  * - 选中药丸：LIQUID 档的近黑薄膜（深 α0.12 / 浅
- *   α0.08）贴合槽位；选中字形取主题强调色，未选中取
- *   泥坛 LIQUID 行的字形色（深 #F2F2F7 / 浅 #3A3A3C）。
- *   泥坛的药丸拖动/果冻动画与其自家手势机绑定，静态
- *   观感不依赖它，未搬（标签常显沿用工具箱既有口径）。
- * - 玻璃关：同一胶囊变实色（既有行为）；悬浮关走库的
- *   贴底 NavigationBar（宿主侧处理，不在这里）。
+ *   α0.08）。v1.3.0 起药丸是真透镜且可拖动（泥坛
+ *   MainTabDock 的拖动系统补齐移植）：[DampedDragAnimation]
+ *   目录弹簧组原样（value ζ1.0/k1000、press ζ1.0/k1000、
+ *   scaleX ζ0.6/k250、scaleY ζ0.7/k250、velocity
+ *   ζ0.5/k300、pressedScale 78/56），手势决策走纯手势机
+ *   [DockGestureMachine]（点按 = 零位移拖动、松手吸附最近
+ *   栏并导航）；按压时药丸透镜放大（折射 10/14 ×
+ *   pressProgress，色散开），胶囊整体橡皮筋平移（4dp
+ *   EaseOut 上限）并绽放（上限 +5%）。
+ * - 与泥坛的取舍（工具箱标签常显口径优先）：泥坛的可见行
+ *   标签随药丸接近才长出/淡入，且药丸采样的是页面 +
+ *   tabsBackdrop 强调色副本的组合纹理——被药丸盖住的选中
+ *   字形只能经药丸纹理到达屏幕。工具箱四栏标签必须常显，
+ *   若照搬组合采样，可见行字形与副本字形会在药丸滑动时
+ *   错位重影。故本版舍弃 tabsBackdrop 副本：药丸只采样
+ *   页面 backdrop 做透镜，可见行（图标 + 文字常显、字形色
+ *   随药丸位置在未选色与强调色之间 lerp）画在药丸之上，
+ *   字形永远清晰不重影；代价是按压时被药丸盖住的字形不
+ *   随透镜变形（页面内容仍被透镜放大）。
+ * - 玻璃关：同一胶囊变实色，药丸退化为同色薄膜块（拖动、
+ *   吸附、按压缩放照常）；悬浮关走库的贴底 NavigationBar
+ *   （宿主侧处理，不在这里）。
  */
 @Composable
 private fun FloatingGlassBar(
@@ -685,6 +740,137 @@ private fun FloatingGlassBar(
         (screenWidth - 32.dp).coerceAtLeast(0.dp),
         DOCK_MAX_WIDTH,
     )
+    val slotWidth = (dockWidth - DOCK_INNER_PADDING * 2) / tabs.size
+    val density = LocalDensity.current
+    val slotWidthPx = with(density) { slotWidth.toPx() }
+    val dockWidthPx = with(density) { dockWidth.toPx() }
+    val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
+    val selectedIndex = tabs.indexOfFirst { it.first == tab }.coerceAtLeast(0)
+
+    // ── 拖动系统（泥坛 MainTabDock 同构，弹簧参数见类注释）──
+    val animationScope = rememberCoroutineScope()
+    var currentIndex by remember { mutableIntStateOf(selectedIndex) }
+    val offsetAnimation = remember { Animatable(0f) }
+    val panelOffset by remember(density, dockWidthPx) {
+        derivedStateOf {
+            val fraction = (offsetAnimation.value / dockWidthPx).coerceIn(-1f, 1f)
+            with(density) {
+                4.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction))
+            }
+        }
+    }
+    val onSelectState = rememberUpdatedState(onSelect)
+    val tabsState = rememberUpdatedState(tabs)
+    val dampedDragAnimation = remember(animationScope) {
+        DampedDragAnimation(
+            animationScope = animationScope,
+            initialValue = selectedIndex.toFloat(),
+            valueRange = 0f..(tabs.size - 1).toFloat(),
+            visibilityThreshold = 0.001f,
+            initialScale = 1f,
+            pressedScale = 78f / 56f,
+        )
+    }
+    // 手势决策只在纯手势机里做（泥坛 v1.7.5 的教训：释放时的
+    // 导航目标必须来自手势本身的位置，不能读动画的异步状态，
+    // 否则快速点按会导航不到）。这里只把指针流翻译成机器
+    // 事件、把机器意图执行到动画引擎上。
+    val gestureMachine = remember(slotWidthPx, tabs.size, isLtr) {
+        DockGestureMachine(
+            slotWidthPx = slotWidthPx,
+            tabCount = tabs.size,
+            isLtr = isLtr,
+        )
+    }
+    fun executeDockIntent(intent: DockGestureIntent) {
+        when (intent) {
+            is DockGestureIntent.PressStarted -> {
+                if (intent.index != dampedDragAnimation.targetValue.roundToInt()) {
+                    dampedDragAnimation.updateValue(intent.index.toFloat())
+                }
+                dampedDragAnimation.press()
+            }
+            is DockGestureIntent.DragTo -> {
+                dampedDragAnimation.updateValue(intent.value)
+                animationScope.launch {
+                    offsetAnimation.snapTo(offsetAnimation.value + intent.deltaPx)
+                }
+            }
+            is DockGestureIntent.ReleaseSelect -> {
+                val wasCurrent = intent.index == currentIndex
+                currentIndex = intent.index
+                dampedDragAnimation.animateToValue(intent.index.toFloat())
+                animationScope.launch {
+                    offsetAnimation.animateTo(0f, spring(1f, 300f, 0.5f))
+                }
+                dampedDragAnimation.release()
+                if (wasCurrent) {
+                    // 点按已选中栏：currentIndex 不变、下方收集器
+                    // 不会触发，直接走宿主选择——「系统页子页时
+                    // 再点系统栏回总览」的既有行为靠这条保留。
+                    tabsState.value.getOrNull(intent.index)?.let {
+                        onSelectState.value(it.first)
+                    }
+                }
+            }
+            DockGestureIntent.ReleaseCancel -> {
+                dampedDragAnimation.animateToValue(currentIndex.toFloat())
+                animationScope.launch {
+                    offsetAnimation.animateTo(0f, spring(1f, 300f, 0.5f))
+                }
+                dampedDragAnimation.release()
+            }
+        }
+    }
+    val dockGestureModifier = Modifier.pointerInput(gestureMachine) {
+        awaitEachGesture {
+            awaitFirstDown(false, PointerEventPass.Initial)
+            val down = awaitFirstDown(false)
+            gestureMachine.onEvent(
+                DockGestureEvent.Down(down.position.x, currentIndex),
+            ).forEach(::executeDockIntent)
+            val pointerId = down.id
+            var finished = false
+            while (!finished) {
+                val event = awaitPointerEvent()
+                val change = event.changes.fastFirstOrNull { it.id == pointerId }
+                when {
+                    change == null -> {
+                        gestureMachine.onEvent(DockGestureEvent.Cancel)
+                            .forEach(::executeDockIntent)
+                        finished = true
+                    }
+                    change.changedToUpIgnoreConsumed() -> {
+                        gestureMachine.onEvent(DockGestureEvent.Up)
+                            .forEach(::executeDockIntent)
+                        finished = true
+                    }
+                    change.position != change.previousPosition -> {
+                        gestureMachine.onEvent(
+                            DockGestureEvent.Move(change.position.x),
+                        ).forEach(::executeDockIntent)
+                    }
+                }
+            }
+        }
+    }
+    // 外部选中变化（宿主切页）只同步药丸位置；导航由下面的
+    // 收集器在 currentIndex 变化时统一发出（宿主回调有守卫，
+    // 落到当前栏时是空操作）。
+    LaunchedEffect(selectedIndex) {
+        currentIndex = selectedIndex
+    }
+    LaunchedEffect(dampedDragAnimation) {
+        snapshotFlow { currentIndex }
+            .drop(1)
+            .collectLatest { index ->
+                dampedDragAnimation.animateToValue(index.toFloat())
+                tabsState.value.getOrNull(index)?.let {
+                    onSelectState.value(it.first)
+                }
+            }
+    }
+
     Box(
         modifier = modifier
             .navigationBarsPadding()
@@ -694,7 +880,14 @@ private fun FloatingGlassBar(
         Box(
             modifier = Modifier
                 .width(dockWidth)
-                .height(DOCK_HEIGHT),
+                .height(DOCK_HEIGHT)
+                .graphicsLayer {
+                    // 胶囊橡皮筋平移 + 按压绽放（泥坛同款上限）
+                    translationX = panelOffset
+                    val bloom = 1f + 0.05f * dampedDragAnimation.pressProgress
+                    scaleX = bloom
+                    scaleY = bloom
+                },
         ) {
             // ── 外壳：玻璃开走 LIQUID 链 + 对齐边缘；关走实色 ──
             Box(
@@ -758,51 +951,127 @@ private fun FloatingGlassBar(
                         },
                     ),
             )
-            // ── 槽行：药丸 + 图标文字（自绘单元格，定宽槽位）──
-            Row(
+            // ── 内层条：药丸（透镜）+ 可见行（常显）+ 手势层 ──
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(DOCK_INNER_PADDING),
-                verticalAlignment = Alignment.CenterVertically,
             ) {
-                for ((value, icon, label) in tabs) {
-                    val selected = tab == value
-                    val contentColor = if (selected) accent else idleContent
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clip(shape)
-                            .then(
-                                if (selected) {
-                                    Modifier.background(pillColor, shape)
+                // 药丸：只采样页面 backdrop（取舍见函数头注释）。
+                // 静止时透镜为零、表面就是 v1.2.3 的近黑薄膜，
+                // 观感与静态版一致；按压时透镜 10/14 ×
+                // pressProgress 放大身后的页面内容。
+                val pillModifier = if (glass) {
+                    Modifier.drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { shape },
+                        effects = {
+                            val p = dampedDragAnimation.pressProgress
+                            lens(
+                                refractionHeight = 10.dp.toPx() * p,
+                                refractionAmount = 14.dp.toPx() * p,
+                                chromaticAberration = true,
+                            )
+                        },
+                        highlight = {
+                            Highlight(
+                                alpha = 0.85f * dampedDragAnimation.pressProgress,
+                            )
+                        },
+                        shadow = {
+                            Shadow(alpha = dampedDragAnimation.pressProgress)
+                        },
+                        innerShadow = {
+                            val p = dampedDragAnimation.pressProgress
+                            InnerShadow(radius = 8.dp * p, alpha = p)
+                        },
+                        layerBlock = {
+                            scaleX = dampedDragAnimation.scaleX
+                            scaleY = dampedDragAnimation.scaleY
+                            val velocity = dampedDragAnimation.velocity / 10f
+                            scaleX /= 1f - (velocity * 0.75f).coerceIn(-0.2f, 0.2f)
+                            scaleY *= 1f - (velocity * 0.25f).coerceIn(-0.2f, 0.2f)
+                        },
+                        onDrawSurface = {
+                            val p = dampedDragAnimation.pressProgress
+                            drawRect(pillColor, alpha = 1f - p)
+                            drawRect(Color.Black.copy(alpha = 0.03f * p))
+                        },
+                    )
+                } else {
+                    Modifier.background(pillColor, shape)
+                }
+                Box(
+                    Modifier
+                        .width(slotWidth)
+                        .fillMaxHeight()
+                        .graphicsLayer {
+                            translationX =
+                                if (isLtr) {
+                                    dampedDragAnimation.value * slotWidthPx
                                 } else {
-                                    Modifier
+                                    -dampedDragAnimation.value * slotWidthPx
+                                }
+                            if (!glass) {
+                                scaleX = dampedDragAnimation.scaleX
+                                scaleY = dampedDragAnimation.scaleY
+                            }
+                        }
+                        .then(pillModifier),
+                )
+                // 可见行：图标 + 文字常显（工具箱既有口径），画在
+                // 药丸之上保证字形不被透镜/薄膜压沉；条目只带
+                // 语义（无指针输入），点按与拖动都由手势层经
+                // 手势机统一处理（泥坛 DockItem 同款分工）。
+                Row(Modifier.fillMaxSize()) {
+                    tabs.forEachIndexed { index, (value, icon, label) ->
+                        val progress = (1f - abs(index.toFloat() - dampedDragAnimation.value))
+                            .coerceIn(0f, 1f)
+                        val contentColor = lerp(idleContent, accent, progress)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(shape)
+                                .semantics(mergeDescendants = true) {
+                                    role = Role.Tab
+                                    selected = tab == value
+                                    onClick { currentIndex = index; true }
                                 },
-                            )
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) { onSelect(value) },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = label,
-                                tint = contentColor,
-                                modifier = Modifier.size(22.dp),
-                            )
-                            Text(
-                                text = label,
-                                fontSize = 11.sp,
-                                lineHeight = 13.sp,
-                                color = contentColor,
-                                fontWeight = FontWeight.Medium,
-                            )
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = label,
+                                    tint = contentColor,
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .graphicsLayer {
+                                            val s = 1f +
+                                                0.2f * progress * dampedDragAnimation.pressProgress
+                                            scaleX = s
+                                            scaleY = s
+                                        },
+                                )
+                                Text(
+                                    text = label,
+                                    fontSize = 11.sp,
+                                    lineHeight = 13.sp,
+                                    color = contentColor,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
                         }
                     }
                 }
+                // 手势层：盖满内层条，按下即入机（无 touch slop，
+                // 点按是零位移拖动），与泥坛的姿势一致。
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .then(dockGestureModifier),
+                )
             }
         }
     }
@@ -1164,6 +1433,7 @@ private fun SystemScreen(
     onOpenNavWake: () -> Unit,
     onOpenShade: () -> Unit,
     onOpenNightIcon: () -> Unit,
+    onOpenLibraryPlus: () -> Unit,
 ) {
     Scaffold(
         containerColor = MiuixTheme.colorScheme.surface,
@@ -1232,9 +1502,10 @@ private fun SystemScreen(
                         onCheckedChange = onToggleNightIcon,
                         onClick = onOpenNightIcon,
                     )
-                    PlaceholderRow(
+                    SuperArrow(
                         title = "资源库增强",
-                        summary = "下一阶段合入",
+                        summary = "隐藏应用、文件夹改名与新建分类、桌面手势、荣耀搜索净化",
+                        onClick = onOpenLibraryPlus,
                     )
                 }
 

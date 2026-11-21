@@ -6,6 +6,7 @@ import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_InitPackageResources
 import de.robv.android.xposed.callbacks.XC_LoadPackage
+import io.github.yuxiximyxx.honortoolbox.libraryplus.hook.LibraryPlusHook
 import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeHook
 import io.github.yuxiximyxx.honortoolbox.nighticon.NightIconHook
 import io.github.yuxiximyxx.honortoolbox.quickgesture.QuickGestureHook
@@ -27,7 +28,10 @@ import io.github.yuxiximyxx.honortoolbox.shadeclock.ShadeClockHook
  *   探针（ShadeClockHook 内部处理）+ 图标日夜切换
  *   （NightIcon，自带总开关在它自己的配置里，默认关）；
  * - com.hihonor.servicecenter：快服务手势改向
- *   （QuickGesture，自带总开关在它自己的配置里，默认关）。
+ *   （QuickGesture，自带总开关在它自己的配置里，默认关）；
+ * - com.hihonor.android.launcher / com.hihonor.hiboard /
+ *   com.hihonor.search：资源库增强（LibraryPlus，v1.3.0 合入；
+ *   启动器分支与 ShadeClock 探针、NightIcon 并行安装）。
  */
 class ToolboxHook : IXposedHookLoadPackage, IXposedHookInitPackageResources {
 
@@ -69,6 +73,14 @@ class ToolboxHook : IXposedHookLoadPackage, IXposedHookInitPackageResources {
                     ShadeClockHook().handleLoadPackage(lpparam)
                 }
                 NightIconHook.install(lpparam)
+                // 资源库增强（LibraryPlus 合入，v1.3.0）：自带作用域
+                // 判断与主进程判断，配置无总开关、各项默认关/跟随，
+                // 不经 FeatureGate（落盘语义与独立版一致）。
+                LibraryPlusHook().handleLoadPackage(lpparam)
+            }
+            "com.hihonor.hiboard",
+            "com.hihonor.search" -> {
+                LibraryPlusHook().handleLoadPackage(lpparam)
             }
             "com.hihonor.servicecenter" -> {
                 QuickGestureHook().handleLoadPackage(lpparam)
