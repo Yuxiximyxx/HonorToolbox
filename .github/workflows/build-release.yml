@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.2.0-release.apk
+          cp "$SRC" dist/HonorToolbox-1.2.1-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.2.0-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.2.1-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,33 +66,27 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.2.0
-          name: 荣耀工具箱 1.2.0
+          tag_name: v1.2.1
+          name: 荣耀工具箱 1.2.1
           body: |
-            ## 荣耀工具箱 1.2.0（界面架构重做）
+            ## 荣耀工具箱 1.2.1（界面保真修复）
 
-            本版按反馈重做了设置应用的信息架构，功能、设置项、
-            默认值与生效方式一概不变，覆盖安装即可、配置不用
-            重设。
+            本版只修界面呈现：功能、设置项、默认值与生效方式
+            一概不变，覆盖安装即可、配置不用重设。
 
-            **底栏四栏：首页 / 系统 / 应用 / 设置**
-            - 首页改为纯状态总览（已启用功能数、机型、系统、
-              版本）+「重启作用域」四行直接列在页内，点行就
-              执行；右上角的重启按钮和弹窗撤除，全应用只剩
-              首页这一处重启入口。
-            - 现在的全部功能只在「系统」页出现一次，按手势与
-              唤醒 / 通知中心 / 桌面 / 耳机分组，每行带总开关、
-              点行进各自的设置页；首页不再重复列功能。
-            - 「应用」页是占位，留给以后非荣耀系统的应用模块；
-              「设置」页放软件主题（跟随系统/浅色/深色）、悬浮
-              底栏开关、玻璃质感开关和关于。
+            **首页按效果图落地**
+            - 顶部蓝色状态大卡（模块运行状态、LSPosed 激活
+              与作用域个数都是真值）、已启用功能与机型两张
+              并排小卡、「重启作用域」四行收进带分割线的卡
+              片，整页卡片在灰底上清晰可见（上一版浅色下白
+              卡压白底、看起来像没卡片，这次一并修了）。
 
-            **底栏玻璃做实**
-            - 悬浮底栏真正压在滚动内容之上，内容能从栏下滚
-              过并透出毛玻璃（背景模糊是真的，不是实色贴
-              图），选中项带药丸高亮；日夜模式都成立。
-            - 不喜欢悬浮或玻璃，去「设置」页关掉即可：关悬浮
-              后底栏贴底，关玻璃后底栏变实色。
+            **悬浮底栏换定版 Dock 配方**
+            - 宽度按栏目数自适应、四栏时接近满宽，不再缩成
+              中间一小条；高 68dp，强毛玻璃（栏下内容透出
+              明显模糊），选中项是深色药丸底配浅色图标文字。
+            - 「设置」页的悬浮/玻璃开关行为不变：关玻璃变
+              实色，关悬浮变贴底栏。
 
             ⚠️ 从旧版升级直接覆盖安装即可，配置不用重设。
 

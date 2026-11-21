@@ -479,7 +479,7 @@ internal fun ShadeSettingsScreen(
     }
 
     Scaffold(
-        containerColor = MiuixTheme.colorScheme.background,
+        containerColor = MiuixTheme.colorScheme.surface,
         topBar = {
             SmallTopAppBar(
                 title = pageTitle,

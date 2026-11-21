@@ -10,21 +10,28 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,8 +52,10 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlurEffect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
@@ -55,6 +64,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -86,10 +96,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.FloatingNavigationBarDisplayMode
-import top.yukonga.miuix.kmp.basic.FloatingNavigationBarItem
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.LocalFloatingNavigationBarDisplayMode
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarDisplayMode
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
@@ -131,9 +139,18 @@ import top.yukonga.miuix.kmp.theme.ThemeController
  * 滚过；玻璃开时栏体用背景图层录制 + 高斯模糊自绘出真毛
  * 玻璃（miuix 0.8.8 的 FloatingNavigationBar 经源码核查只
  * 是实色背景、无任何模糊/背景采样能力，且其选中项只有加
- * 粗没有药丸底，故胶囊容器与药丸高亮在这里自绘，栏内项
- * 目仍用库的 FloatingNavigationBarItem）；悬浮关时改用库
- * 的贴底 NavigationBar。
+ * 粗没有药丸底）。v1.2.1 按已定版的悬浮 Dock 配方重做：
+ * 宽度按栏目数自适应（每栏固定槽宽、封顶屏宽减两侧各
+ * 16dp）、高 68dp、强毛玻璃（大半径模糊 + 乳白/深色厚着
+ * 色）、选中项是深色椭圆药丸底配浅色图标文字，栏内单元
+ * 格一并自绘；悬浮关时改用库的贴底 NavigationBar。
+ *
+ * 页面底色口径（v1.2.1）：各页 Scaffold 底色统一用
+ * colorScheme.surface（浅色 #F7F7F7、夜间纯黑），卡片用
+ * surfaceContainer（浅色白、夜间 #242424）——miuix 浅色
+ * 方案的 background 与 surfaceContainer 同为纯白，早先各
+ * 页显式写 background 时白卡压白底、卡片完全看不见，这
+ * 是 v1.2.0 首页「没有卡片」的根因。
  *
  * 配置绑定（原各设置页 onCreate 的事，v1.1.0 起统一在宿主
  * onCreate 做，与逐页打开等价，本版保持）：长按唤醒
@@ -229,7 +246,7 @@ private enum class ToolboxTab { Home, System, Apps, Settings }
 private enum class SystemPage { Root, QuickGesture, NavWake, Shade, NightIcon }
 
 /** 悬浮底栏占的高度余量：各页滚动内容底部留白加上它，最后一项不被栏遮住。 */
-private val FLOATING_BAR_INSET = 100.dp
+private val FLOATING_BAR_INSET = 108.dp
 
 @Composable
 private fun ToolboxHost(
@@ -243,6 +260,12 @@ private fun ToolboxHost(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // 首页状态大卡的真值：激活状态走模块自检标记（见
+    // ModuleActivation），作用域个数读模块声明的作用域数组。
+    val moduleActive = remember { ModuleActivation.isActive() }
+    val scopeCount = remember {
+        context.resources.getStringArray(R.array.xposedscope).size
+    }
     var tab by remember { mutableStateOf(ToolboxTab.Home) }
     var systemPage by remember { mutableStateOf(SystemPage.Root) }
     var showAbout by remember { mutableStateOf(false) }
@@ -338,6 +361,8 @@ private fun ToolboxHost(
             ToolboxTab.Home -> HomeScreen(
                 state = state,
                 syncHint = syncHint,
+                moduleActive = moduleActive,
+                scopeCount = scopeCount,
                 bottomInset = bottomInset,
                 onRestartSystemUi = { restartSystemUi(context, scope) },
                 onRestartLauncher = { restartLauncher(context, scope) },
@@ -468,11 +493,21 @@ private fun ToolboxHost(
     }
 }
 
+/** 悬浮 Dock 每栏的固定槽宽（宽度自适应的定宽口径）。 */
+private val DOCK_SLOT_WIDTH = 88.dp
+
+/** 悬浮 Dock 高度（定版配方约 68dp）。 */
+private val DOCK_HEIGHT = 68.dp
+
 /**
- * 悬浮胶囊底栏：压在内容之上，玻璃开时栏体是背景内容的
- * 高斯模糊 + 半透明主题色（真毛玻璃）；玻璃关时是实色不
- * 透明。选中项带药丸底（库的 FloatingNavigationBarItem 只
- * 有加粗、无药丸，药丸靠给选中项加背景修饰实现）。
+ * 悬浮胶囊底栏（v1.2.1 按已定版 Dock 配方重做）：压在内容
+ * 之上，宽度按栏目数自适应——栏数 × 固定槽宽，封顶为屏
+ * 宽减两侧各 16dp，栏身居中；高 68dp。玻璃开时栏体是背
+ * 景内容的大半径高斯模糊 + 厚着色（日间乳白、夜间深色，
+ * 强毛玻璃口径）；玻璃关时是同一胶囊的实色版。选中项是
+ * 深色椭圆药丸底 + 浅色图标文字（夜间反转为浅药丸深字，
+ * 保证对比），未选中是前景弱色。单元格自绘：库的
+ * FloatingNavigationBarItem 给不了定宽槽位与药丸配色。
  */
 @Composable
 private fun FloatingGlassBar(
@@ -483,93 +518,133 @@ private fun FloatingGlassBar(
     onSelect: (ToolboxTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val tabs = listOf(
+        Triple(ToolboxTab.Home, MiuixIcons.All, "首页"),
+        Triple(ToolboxTab.System, MiuixIcons.Tune, "系统"),
+        Triple(ToolboxTab.Apps, MiuixIcons.GridView, "应用"),
+        Triple(ToolboxTab.Settings, MiuixIcons.Settings, "设置"),
+    )
     val shape = RoundedCornerShape(percent = 50)
-    val surface = MiuixTheme.colorScheme.surfaceContainer
-    val pillColor = MiuixTheme.colorScheme.onSurfaceContainer.copy(alpha = 0.10f)
+    val scheme = MiuixTheme.colorScheme
+    val darkBar = scheme.surfaceContainer.luminance() < 0.5f
+    // 强毛玻璃着色：日间乳白厚罩、夜间深色厚罩
+    val glassTint = if (darkBar) {
+        scheme.surfaceContainer.copy(alpha = 0.58f)
+    } else {
+        Color.White.copy(alpha = 0.68f)
+    }
+    val borderColor = if (darkBar) {
+        Color.White.copy(alpha = 0.10f)
+    } else {
+        Color.White.copy(alpha = 0.55f)
+    }
+    // 选中药丸：日间深底浅字、夜间浅底深字（同一对比口径）
+    val pillColor = scheme.onSurfaceContainer
+    val pillContent = scheme.surfaceContainer
+    val idleContent = scheme.onSurfaceVariantSummary
     var barOrigin by remember { mutableStateOf(Offset.Zero) }
     val blurLayer = rememberGraphicsLayer()
     SideEffect {
-        blurLayer.renderEffect = BlurEffect(64f, 64f, TileMode.Clamp)
+        blurLayer.renderEffect = BlurEffect(120f, 120f, TileMode.Clamp)
     }
-    Row(
+    Box(
         modifier = modifier
-            .padding(horizontal = 18.dp)
+            .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
-            .padding(bottom = 12.dp)
-            .onGloballyPositioned { barOrigin = it.positionInRoot() }
-            .shadow(elevation = 12.dp, shape = shape)
-            .then(
-                if (glass) {
-                    Modifier
-                        .clip(shape)
-                        .drawWithContent {
-                            blurLayer.record(
-                                density = this,
-                                layoutDirection = layoutDirection,
-                                size = IntSize(
-                                    size.width.roundToInt(),
-                                    size.height.roundToInt(),
-                                ),
-                            ) {
-                                translate(
-                                    -(barOrigin.x - contentOrigin.x),
-                                    -(barOrigin.y - contentOrigin.y),
-                                ) {
-                                    drawLayer(backdropLayer)
-                                }
-                            }
-                            drawLayer(blurLayer)
-                            drawRect(surface.copy(alpha = 0.55f))
-                            drawContent()
-                        }
-                } else {
-                    Modifier.background(surface, shape)
-                },
-            )
-            .padding(horizontal = 10.dp, vertical = 7.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 12.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        CompositionLocalProvider(
-            LocalFloatingNavigationBarDisplayMode provides FloatingNavigationBarDisplayMode.IconAndText,
-        ) {
-            val tabs = listOf(
-                Triple(ToolboxTab.Home, MiuixIcons.All, "首页"),
-                Triple(ToolboxTab.System, MiuixIcons.Tune, "系统"),
-                Triple(ToolboxTab.Apps, MiuixIcons.GridView, "应用"),
-                Triple(ToolboxTab.Settings, MiuixIcons.Settings, "设置"),
-            )
-            for ((value, icon, label) in tabs) {
-                val selected = tab == value
-                FloatingNavigationBarItem(
-                    selected = selected,
-                    onClick = { onSelect(value) },
-                    icon = icon,
-                    label = label,
-                    modifier = if (selected) {
+        Row(
+            modifier = Modifier
+                .width(DOCK_SLOT_WIDTH * tabs.size)
+                .height(DOCK_HEIGHT)
+                .onGloballyPositioned { barOrigin = it.positionInRoot() }
+                .shadow(elevation = 16.dp, shape = shape)
+                .then(
+                    if (glass) {
                         Modifier
-                            .clip(RoundedCornerShape(percent = 50))
-                            .background(pillColor)
-                            .padding(horizontal = 7.dp)
+                            .clip(shape)
+                            .drawWithContent {
+                                blurLayer.record(
+                                    density = this,
+                                    layoutDirection = layoutDirection,
+                                    size = IntSize(
+                                        size.width.roundToInt(),
+                                        size.height.roundToInt(),
+                                    ),
+                                ) {
+                                    translate(
+                                        -(barOrigin.x - contentOrigin.x),
+                                        -(barOrigin.y - contentOrigin.y),
+                                    ) {
+                                        drawLayer(backdropLayer)
+                                    }
+                                }
+                                drawLayer(blurLayer)
+                                drawRect(glassTint)
+                                drawContent()
+                            }
+                            .border(1.dp, borderColor, shape)
                     } else {
-                        Modifier.padding(horizontal = 7.dp)
+                        Modifier.background(scheme.surfaceContainer, shape)
                     },
                 )
+                .padding(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            for ((value, icon, label) in tabs) {
+                val selected = tab == value
+                val contentColor = if (selected) pillContent else idleContent
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(shape)
+                        .then(
+                            if (selected) Modifier.background(pillColor, shape) else Modifier,
+                        )
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { onSelect(value) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = label,
+                            tint = contentColor,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        Text(
+                            text = label,
+                            fontSize = 11.sp,
+                            color = contentColor,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 /**
- * 首页：纯状态总览 + 重启区。状态只用真能读到的数据（功能
- * 开关快照、机型、Android 版本、工具箱版本），不编造读不到
- * 的状态。重启四行直接列在页内，点行即执行——全应用唯一
- * 的重启入口（右上角按钮与底部弹窗已撤除）。
+ * 首页：状态总览 + 重启区（v1.2.1 按已批准效果图保真重做）。
+ * 顶部蓝色渐变状态大卡：激活状态与工具箱自检标记读到的
+ * 真值一致（见 [ModuleActivation]），作用域个数读模块声
+ * 明的作用域数组；其下两张并排小卡（已启用功能数、机型/
+ * 系统）；「重启作用域」四行收进一张卡、行间细分割线、
+ * 点行即执行——全应用唯一的重启入口（右上角按钮与底部
+ * 弹窗已撤除）；底部是停用旧模块的提示卡。
  */
 @Composable
 private fun HomeScreen(
     state: HomeState,
     syncHint: String?,
+    moduleActive: Boolean,
+    scopeCount: Int,
     bottomInset: Dp,
     onRestartSystemUi: () -> Unit,
     onRestartLauncher: () -> Unit,
@@ -582,7 +657,7 @@ private fun HomeScreen(
         state.nighticonEnabled,
     ).count { it }
     Scaffold(
-        containerColor = MiuixTheme.colorScheme.background,
+        containerColor = MiuixTheme.colorScheme.surface,
         topBar = {
             SmallTopAppBar(
                 title = "荣耀工具箱",
@@ -601,27 +676,103 @@ private fun HomeScreen(
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 24.dp + bottomInset),
             ) {
-                SmallTitle(
-                    text = "状态",
-                    insideMargin = PaddingValues(start = 4.dp),
-                )
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    BasicComponent(
-                        title = "已启用功能",
-                        summary = "$enabledCount / 4（开关在「系统」页）",
+                // ── 状态大卡（蓝色渐变；未激活时转灰并如实提示）──
+                val heroBrush = if (moduleActive) {
+                    Brush.linearGradient(
+                        listOf(Color(0xFF2F7CF6), Color(0xFF4A9BF5)),
                     )
-                    BasicComponent(
-                        title = "机型",
-                        summary = "${Build.MANUFACTURER} ${Build.MODEL}",
+                } else {
+                    Brush.linearGradient(
+                        listOf(Color(0xFF75757A), Color(0xFF55555A)),
                     )
-                    BasicComponent(
-                        title = "系统",
-                        summary = "Android ${Build.VERSION.RELEASE} · API ${Build.VERSION.SDK_INT}",
-                    )
-                    BasicComponent(
-                        title = "工具箱版本",
-                        summary = BuildConfig.VERSION_NAME,
-                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(heroBrush),
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                        Text(
+                            text = if (moduleActive) "模块运行中" else "模块未激活",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                        )
+                        Text(
+                            text = if (moduleActive) {
+                                "LSPosed 已激活 · 作用域 $scopeCount 个进程"
+                            } else {
+                                "请在 LSPosed 里启用本模块 · 作用域 $scopeCount 个进程"
+                            },
+                            fontSize = 12.5.sp,
+                            color = Color.White.copy(alpha = 0.85f),
+                            modifier = Modifier.padding(top = 3.dp),
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                // ── 两张并排小卡：已启用功能 / 机型 ──
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Max),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                            Text(
+                                text = "已启用功能",
+                                fontSize = 12.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            )
+                            Row(
+                                modifier = Modifier.padding(top = 2.dp),
+                                verticalAlignment = Alignment.Bottom,
+                            ) {
+                                Text(
+                                    text = "$enabledCount",
+                                    fontSize = 22.sp,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                Text(
+                                    text = " / 4",
+                                    fontSize = 13.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                )
+                            }
+                        }
+                    }
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                            Text(
+                                text = "机型",
+                                fontSize = 12.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            )
+                            Text(
+                                text = Build.MODEL,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(top = 5.dp),
+                            )
+                            Text(
+                                text = systemVersionLabel(),
+                                fontSize = 11.5.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            )
+                        }
+                    }
                 }
 
                 if (syncHint != null) {
@@ -643,16 +794,19 @@ private fun HomeScreen(
                         summary = "通知中心主题的改动靠它生效",
                         onClick = onRestartSystemUi,
                     )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     RestartRow(
                         title = "重启长按导航条唤醒",
                         summary = "和「重启系统界面」是同一个动作，长按唤醒的开关改动靠它生效",
                         onClick = onRestartSystemUi,
                     )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     RestartRow(
                         title = "重启桌面",
                         summary = "图标日夜切换的改动靠它生效",
                         onClick = onRestartLauncher,
                     )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     RestartRow(
                         title = "强停快服务",
                         summary = "快服务手势改向首次启用作用域后点它",
@@ -672,6 +826,22 @@ private fun HomeScreen(
             }
         }
     }
+}
+
+/**
+ * 系统版本文案：优先读荣耀的 MagicOS 版本系统属性（真机
+ * 有什么读什么），读不到回退 Android 版本号，不编造。
+ */
+private fun systemVersionLabel(): String {
+    fun prop(key: String): String? = runCatching {
+        val cls = Class.forName("android.os.SystemProperties")
+        cls.getMethod("get", String::class.java).invoke(null, key) as? String
+    }.getOrNull()?.takeIf { it.isNotBlank() }
+    prop("ro.build.version.magic")?.let {
+        return if (it.contains("MagicOS")) it else "MagicOS $it"
+    }
+    prop("ro.build.version.emui")?.let { return it }
+    return "Android ${Build.VERSION.RELEASE}"
 }
 
 /** 首页重启区的一行：点行直接执行，行尾一个重启图标示意可点。 */
@@ -715,7 +885,7 @@ private fun SystemScreen(
     onOpenNightIcon: () -> Unit,
 ) {
     Scaffold(
-        containerColor = MiuixTheme.colorScheme.background,
+        containerColor = MiuixTheme.colorScheme.surface,
         topBar = {
             SmallTopAppBar(
                 title = "系统",
@@ -819,7 +989,7 @@ private fun SystemScreen(
 @Composable
 private fun AppsScreen(bottomInset: Dp) {
     Scaffold(
-        containerColor = MiuixTheme.colorScheme.background,
+        containerColor = MiuixTheme.colorScheme.surface,
         topBar = {
             SmallTopAppBar(
                 title = "应用",
@@ -867,7 +1037,7 @@ private fun SettingsScreen(
     bottomInset: Dp,
 ) {
     Scaffold(
-        containerColor = MiuixTheme.colorScheme.background,
+        containerColor = MiuixTheme.colorScheme.surface,
         topBar = {
             SmallTopAppBar(
                 title = "设置",

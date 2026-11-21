@@ -24,8 +24,8 @@ android {
         applicationId = "io.github.yuxiximyxx.honortoolbox"
         minSdk = 34   // Android 14 (MagicOS 8 起，与 MagicPods 一致)
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.2.0"
+        versionCode = 7
+        versionName = "1.2.1"
     }
 
     signingConfigs {

@@ -218,7 +218,7 @@ internal fun QuickGestureScreen(onExit: () -> Unit, bottomInset: Dp = 0.dp) {
     }
 
     Scaffold(
-        containerColor = MiuixTheme.colorScheme.background,
+        containerColor = MiuixTheme.colorScheme.surface,
         topBar = {
             SmallTopAppBar(
                 title = pageTitle,

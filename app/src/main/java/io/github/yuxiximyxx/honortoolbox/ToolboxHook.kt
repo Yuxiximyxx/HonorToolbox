@@ -2,6 +2,8 @@ package io.github.yuxiximyxx.honortoolbox
 
 import de.robv.android.xposed.IXposedHookInitPackageResources
 import de.robv.android.xposed.IXposedHookLoadPackage
+import de.robv.android.xposed.XC_MethodHook
+import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_InitPackageResources
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeHook
@@ -30,6 +32,24 @@ import io.github.yuxiximyxx.honortoolbox.shadeclock.ShadeClockHook
 class ToolboxHook : IXposedHookLoadPackage, IXposedHookInitPackageResources {
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
+        // 工具箱自己的进程：只装一个激活标记 hook（LSPosed 把
+        // 已启用模块注入它自己的应用进程时才会命中），供设置
+        // 应用首页如实显示「LSPosed 已激活」。不碰任何功能分发。
+        if (lpparam.packageName == "io.github.yuxiximyxx.honortoolbox") {
+            runCatching {
+                XposedHelpers.findAndHookMethod(
+                    ModuleActivation::class.java,
+                    lpparam.classLoader,
+                    "isActive",
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            param.result = true
+                        }
+                    },
+                )
+            }
+            return
+        }
         when (lpparam.packageName) {
             "com.android.systemui" -> {
                 if (FeatureGate.isEnabled(FeatureGate.SHADE_CLOCK, true)) {
@@ -63,4 +83,13 @@ class ToolboxHook : IXposedHookLoadPackage, IXposedHookInitPackageResources {
         if (!FeatureGate.isEnabled(FeatureGate.SHADE_CLOCK, true)) return
         ShadeClockHook().handleInitPackageResources(resparam)
     }
+}
+
+/**
+ * 模块激活自检标记：本体永远返回 false；LSPosed 已启用本
+ * 模块时，[ToolboxHook] 会在工具箱自己的进程里把这个方法
+ * hook 成 true。设置应用首页据此显示激活状态（真值，不猜）。
+ */
+object ModuleActivation {
+    fun isActive(): Boolean = false
 }

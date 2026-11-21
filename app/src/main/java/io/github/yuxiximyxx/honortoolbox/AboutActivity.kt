@@ -33,7 +33,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 @Composable
 internal fun AboutScreen(onBack: () -> Unit) {
     Scaffold(
-        containerColor = MiuixTheme.colorScheme.background,
+        containerColor = MiuixTheme.colorScheme.surface,
         topBar = {
             SmallTopAppBar(
                 title = "关于",

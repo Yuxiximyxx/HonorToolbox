@@ -82,7 +82,7 @@ internal fun NightIconScreen(
     bottomInset: Dp = 0.dp,
 ) {
     Scaffold(
-        containerColor = MiuixTheme.colorScheme.background,
+        containerColor = MiuixTheme.colorScheme.surface,
         topBar = {
             SmallTopAppBar(
                 title = "图标日夜切换",
