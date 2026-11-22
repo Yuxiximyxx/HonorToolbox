@@ -18,3 +18,7 @@
 # setClassName 直达、QS 磁贴在 Manifest 声明、配置类用
 # kotlinx.serialization 生成序列化器，整包保留防改名/裁剪
 -keep class io.github.yuxiximyxx.honortoolbox.magicpods.** { *; }
+
+# PalmPurify（v1.6.0 合入）：hook 类在宿主进程被装载并反射
+# 访问宿主与自身成员，整包保留防改名/裁剪
+-keep class io.github.yuxiximyxx.honortoolbox.palmpurify.** { *; }

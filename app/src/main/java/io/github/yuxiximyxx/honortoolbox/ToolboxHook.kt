@@ -11,6 +11,7 @@ import io.github.yuxiximyxx.honortoolbox.magicpods.hook.MagicPodsHook
 import io.github.yuxiximyxx.honortoolbox.magicxm4.hook.MagicXm4Hook
 import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeHook
 import io.github.yuxiximyxx.honortoolbox.nighticon.NightIconHook
+import io.github.yuxiximyxx.honortoolbox.palmpurify.PalmPurifyHook
 import io.github.yuxiximyxx.honortoolbox.quickgesture.QuickGestureHook
 import io.github.yuxiximyxx.honortoolbox.shadeclock.ShadeClockHook
 
@@ -34,6 +35,10 @@ import io.github.yuxiximyxx.honortoolbox.shadeclock.ShadeClockHook
  * - com.hihonor.android.launcher / com.hihonor.hiboard /
  *   com.hihonor.search：资源库增强（LibraryPlus，v1.3.0 合入；
  *   启动器分支与 ShadeClock 探针、NightIcon 并行安装）。
+ * - com.tencent.qt.qtl：掌盟净化（PalmPurify，v1.6.0 合入；
+ *   与资源库同口径不经 FeatureGate——原模块无总开关、各功能
+ *   开关即门控，FilePrefs 现读；旧配置 hook 侧导出、设置
+ *   子页导入，见 palmpurify/PalmMigration）。
  */
 class ToolboxHook : IXposedHookLoadPackage, IXposedHookInitPackageResources {
 
@@ -104,6 +109,12 @@ class ToolboxHook : IXposedHookLoadPackage, IXposedHookInitPackageResources {
             }
             "com.hihonor.servicecenter" -> {
                 QuickGestureHook().handleLoadPackage(lpparam)
+            }
+            "com.tencent.qt.qtl" -> {
+                // 掌盟净化（PalmPurify 合入，v1.6.0）：只在主进程
+                // 装钩、各功能开关 FilePrefs 现读为门控，口径见
+                // 文件头。
+                PalmPurifyHook.install(lpparam)
             }
         }
         // 激活状态文件（v1.2.3）：分发到功能宿主并跑完该分支

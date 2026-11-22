@@ -28,6 +28,7 @@
         <item>com.hihonor.audioaccessorymanager</item>
         <item>com.hihonor.imedia.sws</item>
         <item>com.hihonor.controlcenter</item>
+        <item>com.tencent.qt.qtl</item>
     </string-array>
 
     <!-- 图标日夜切换（原 NightIcon 设置项文案，ni_ 前缀防冲突；

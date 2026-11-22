@@ -142,7 +142,7 @@
             android:value="true" />
         <meta-data
             android:name="xposeddescription"
-            android:value="荣耀工具箱：MagicOS 功能合集——快服务手势改向、长按导航条唤醒改向、通知中心主题（锁屏主题样式渲染）、桌面图标随日夜切换、资源库增强与荣耀搜索净化。" />
+            android:value="荣耀工具箱：MagicOS 功能合集——快服务手势改向、长按导航条唤醒改向、通知中心主题（锁屏主题样式渲染）、桌面图标随日夜切换、资源库增强与荣耀搜索净化、掌盟净化。" />
         <meta-data
             android:name="xposedminversion"
             android:value="82" />

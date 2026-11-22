@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.5.0-release.apk
+          cp "$SRC" dist/HonorToolbox-1.6.0-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.5.0-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.6.0-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,44 +66,48 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.5.0
-          name: 荣耀工具箱 1.5.0
+          tag_name: v1.6.0
+          name: 荣耀工具箱 1.6.0
           body: |
-            ## 荣耀工具箱 1.5.0（MagicXM4 合入：索尼耳机设备中心）
+            ## 荣耀工具箱 1.6.0（掌盟净化合入：「应用」页首个功能）
 
-            **MagicXM4 合入（荣耀工具箱第二阶段第三弹）**
-            - 独立模块 MagicXM4（Sony WH-1000XM4 在 MagicOS 上走
-              索尼 SPP 协议接入荣耀设备中心）的全部功能搬进工具箱：
-              设备中心降噪卡片、双耳/单耳电量、降噪切换、状态栏
-              耳机图标、通知电量文案、控制中心降噪快捷磁贴，以及
-              完整耳机详情页（电量环、降噪分段、EQ、固件信息、
-              电量历史）。入口在「系统 → 耳机 → 索尼 WH-1000XM4
-              设备中心」（原占位行转真入口，Free4 入口不变）。
-            - 技术移植：原模块基于 libxposed 现代 API，本版把
-              全部拦截点逐处转到传统 Xposed API（与工具箱其余
-              功能同底座）；配置通道由 RemotePreferences 换成
-              落盘现读（/sdcard/Download/HonorToolbox/magicxm4/），
-              键名与默认值不变。旧 Material3 首页（PopupActivity /
-              ui/App.kt）按既定拍板整删、不搬入。
-            - 双耳机共存：Free4 与 XM4 同在蓝牙进程时按设备识别
-              分流（Free4 走欢律名 token/productId、XM4 走索尼
-              名匹配），两边电量/降噪键（magicorig_* 与
-              magicxm4_*）与 SPP 通道隔离，互不串扰。
-            - 数据零迁移：约 47 个 magicxm4_* Settings.Global 键
-              （含单耳电量 magicxm4_battery_single、电量历史
-              magicxm4_batt_history）与蓝牙进程内存储全部保名，
-              旧版历史数据装上即在。仅原 RemotePreferences 里的
-              小配置（伪装设备 ID、日志级别、点击动作等，多为
-              默认值）不迁移、回到默认值。
+            **掌盟净化 PalmPurify 合入**
+            - 独立模块 PalmPurify（给掌上英雄联盟 com.tencent.qt.qtl
+              做去广告、界面精简与导航条沉浸）的全部功能搬进工具箱：
+              透明沉浸、屏蔽开屏广告、底栏精简、隐藏中间加号、
+              首页运营模块精简、拦截推广/会员弹窗、关闭更新提醒、
+              屏蔽摇一摇跳转、调试日志。设置入口在「应用 →
+              掌盟净化」（「应用」页原占位换真内容），9 个开关与
+              独立版一一对应，键名与默认值不变。只做展示层拦截，
+              不碰战绩/资产/活动接口（原模块红线不变）。
+            - 技术移植：原模块基于 libxposed 现代 API + DexKit
+              点位定位，本版把全部拦截点逐处转到传统 Xposed API
+              （与工具箱其余功能同底座，DexKit 保留）；配置通道
+              由 RemotePreferences 换成落盘现读
+              （/sdcard/Download/HonorToolbox/palmpurify/）。
+              旧配置自动迁移：独立版里改过的开关（远程组与本地
+              兜底带显式标记的用户值）由 hook 导出、打开掌盟
+              设置子页时导入一次，读不到静默按默认、不崩。
 
-            ⚠️ 装好后请：① 五个作用域与 v1.4.0 相同、无需新增
-            勾选（com.android.bluetooth、com.android.systemui、
-            com.hihonor.audioaccessorymanager、com.hihonor.imedia.sws、
-            com.hihonor.controlcenter）；② **停用旧的独立版
-            MagicXM4 模块**，避免双重 hook；③ 重启一次作用域让
-            新 hook 生效。本版未经真机验证，请按需回验：XM4
-            设备中心卡片出现、电量（含单耳）显示、降噪切换、
-            EQ 保存、历史电量数据是否还在；**双耳机同时连接**
-            时两边电量与降噪互不串扰；Free4 功能不回归。
+            **本版追加增强（单独标注）：底栏显示自定义**
+            - 原单一「底栏精简」改为总闸 + 逐项开关：设置子页
+              按 hook 在掌盟里实际命中的底栏项逐项列名，自己
+              勾选留哪些、藏哪些；逐项缺省与原精简结果一致
+              （首页/我的显示、其余隐藏），升级观感不突变。
+            - 均匀分布沿用掌盟底栏宿主自己的机制：底栏行是
+              LinearLayout，显示项一律等权（weight=1）瓜分整行
+              宽度、隐藏项 GONE 不占位——藏掉任意几项，剩下的
+              自动等距铺满；只剩一项时占满整行。
+
+            ⚠️ 装好后请：① 在 LSPosed 作用域里**新增勾选
+            com.tencent.qt.qtl（掌上英雄联盟）**；② **停用旧的
+            独立版 PalmPurify 模块**，避免双重 hook；③ 重启一次
+            掌盟作用域让新 hook 生效。本版未经真机验证，请按需
+            回验：冷启无开屏广告、底栏精简生效、无中间加号、
+            首页运营模块消失但战绩/资产/活动入口都在、推广
+            弹窗被拦截、更新弹窗关闭、摇一摇不跳转、导航条
+            沉浸且底部 tab 不被手势条遮挡、独立版改过的旧
+            配置是否带过来；**底栏逐项任意勾选组合下剩余项
+            均匀分布、藏到只剩一项时不崩**。
 
           files: dist/*.apk

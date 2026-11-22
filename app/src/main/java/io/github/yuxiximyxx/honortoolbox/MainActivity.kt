@@ -108,6 +108,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import io.github.yuxiximyxx.honortoolbox.libraryplus.LibraryPlusScreen
+import io.github.yuxiximyxx.honortoolbox.palmpurify.PalmPurifyScreen
 import io.github.yuxiximyxx.honortoolbox.magicpods.EarphoneDetailActivity
 import io.github.yuxiximyxx.honortoolbox.magicxm4.EarphoneDetailActivity as Xm4EarphoneDetailActivity
 import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeScreen
@@ -311,6 +312,9 @@ private enum class ToolboxTab { Home, System, Apps, Settings }
 /** 「系统」页内部页：分组总览 / 四个功能的完整设置子页。 */
 private enum class SystemPage { Root, QuickGesture, NavWake, Shade, NightIcon, LibraryPlus }
 
+/** 「应用」页内部页：总览 / 掌盟净化设置子页（v1.6.0）。 */
+private enum class AppsPage { Root, PalmPurify }
+
 /** 首页大卡的激活三态（v1.2.3）：已激活 / 旧版 hook 还在跑 / 未激活。 */
 private enum class ActivationUiState { Active, ActiveOld, Inactive }
 
@@ -349,6 +353,7 @@ private fun ToolboxHost(
     }
     var tab by remember { mutableStateOf(ToolboxTab.Home) }
     var systemPage by remember { mutableStateOf(SystemPage.Root) }
+    var appsPage by remember { mutableStateOf(AppsPage.Root) }
     var showAbout by remember { mutableStateOf(false) }
 
     // ── 各功能总开关快照（首页计数与系统页开关共用一份）──
@@ -424,6 +429,10 @@ private fun ToolboxHost(
         if (next == ToolboxTab.System && tab == ToolboxTab.System) {
             systemPage = SystemPage.Root
         }
+        // 已在应用页子页时再点「应用」栏：回应用页总览
+        if (next == ToolboxTab.Apps && tab == ToolboxTab.Apps) {
+            appsPage = AppsPage.Root
+        }
         tab = next
     }
 
@@ -439,6 +448,9 @@ private fun ToolboxHost(
     // 更晚者先响应）；落到这里时回系统页总览。
     BackHandler(enabled = tab == ToolboxTab.System && systemPage != SystemPage.Root) {
         systemPage = SystemPage.Root
+    }
+    BackHandler(enabled = tab == ToolboxTab.Apps && appsPage != AppsPage.Root) {
+        appsPage = AppsPage.Root
     }
 
     // 悬浮栏下的滚动留白（泥坛 tabDockContentBottomPadding
@@ -519,7 +531,16 @@ private fun ToolboxHost(
                     bottomInset = bottomInset,
                 )
             }
-            ToolboxTab.Apps -> AppsScreen(bottomInset = bottomInset)
+            ToolboxTab.Apps -> when (appsPage) {
+                AppsPage.Root -> AppsScreen(
+                    bottomInset = bottomInset,
+                    onOpenPalmPurify = { appsPage = AppsPage.PalmPurify },
+                )
+                AppsPage.PalmPurify -> PalmPurifyScreen(
+                    onBack = { appsPage = AppsPage.Root },
+                    bottomInset = bottomInset,
+                )
+            }
             ToolboxTab.Settings -> SettingsScreen(
                 themeMode = themeMode,
                 onThemeModeChange = onThemeModeChange,
@@ -1553,9 +1574,16 @@ private fun SystemScreen(
     }
 }
 
-/** 应用页：占位。以后合入的非荣耀系统应用模块放这里，本版无功能项。 */
+/**
+ * 应用页（v1.6.0 起有真内容）：给第三方应用做的增强放这里，
+ * 按组排列、以后同类模块继续往下加组。第一组「应用增强」
+ * 收掌盟净化入口（原独立模块 PalmPurify 的设置）。
+ */
 @Composable
-private fun AppsScreen(bottomInset: Dp) {
+private fun AppsScreen(
+    bottomInset: Dp,
+    onOpenPalmPurify: () -> Unit,
+) {
     Scaffold(
         containerColor = MiuixTheme.colorScheme.surface,
         topBar = {
@@ -1576,9 +1604,21 @@ private fun AppsScreen(bottomInset: Dp) {
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 24.dp + bottomInset),
             ) {
+                SmallTitle("应用增强")
                 Card(modifier = Modifier.fillMaxWidth()) {
+                    SuperArrow(
+                        title = "掌盟净化",
+                        summary = "给掌上英雄联盟去广告、精简界面与导航条沉浸",
+                        onClick = onOpenPalmPurify,
+                    )
+                }
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                ) {
                     Text(
-                        "这里以后放不是荣耀系统的应用模块——给某个第三方应用做的增强（比如掌盟那类）会出现在这一页。现在还没有这类功能合进来。",
+                        "这一页放的不是荣耀系统的应用——给某个第三方应用做的增强都收在这里，以后同类模块继续往这页加。",
                         fontSize = 13.sp,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
