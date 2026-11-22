@@ -30,6 +30,16 @@ object NavWakeStore {
         return syncFromPrefs(context)
     }
 
+    /**
+     * 最近一次落盘同步的结果（v1.6.2）：原先 [syncFromPrefs]
+     * 的返回值在 NavConfig.onChanged 里被直接丢弃、写失败
+     * 全程静默，设置页与真机表现对不上时无从判断。这里记
+     * 下来供设置页明示（与快服务改向的「同步失败」同口径）。
+     */
+    @Volatile
+    var lastSyncOk: Boolean? = null
+        private set
+
     /** 把本地镜像 prefs 整份序列化到落盘文件并回读校验。 */
     fun syncFromPrefs(context: Context): Boolean {
         val p = prefs(context)
@@ -46,7 +56,9 @@ object NavWakeStore {
             append("probe_brain=").append(p.getBoolean("probe_brain", true)).append('\n')
             append("probe_magicvoice_activity=").append(p.getBoolean("probe_magicvoice_activity", true)).append('\n')
         }
-        return writeFile(context, text)
+        val ok = writeFile(context, text)
+        lastSyncOk = ok
+        return ok
     }
 
     private fun writeFile(context: Context, text: String): Boolean {

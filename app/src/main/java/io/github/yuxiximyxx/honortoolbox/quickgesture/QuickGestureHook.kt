@@ -50,8 +50,10 @@ import java.io.File
  * 放行口径（任何一条不满足都完整放行快服务原行为）：
  * from_tag 不是 "LauncherScroll"（正常点开快服务）、配置读
  * 不到/解析失败、总开关关、目标未配置、目标启动失败。
- * 诊断写 /sdcard/Download/quickgesture_probe.log（前缀
- * [QuickGesture]）+ LSPosed 日志；全部异常吞掉，不许崩快服务。
+ * 诊断写 /sdcard/Download/HonorToolbox/quickgesture.log
+ * （v1.6.2 起的主落点；旧路径 /sdcard/Download/
+ * quickgesture_probe.log 继续双写）+ LSPosed 日志，前缀
+ * [QuickGesture]；全部异常吞掉，不许崩快服务。
  * 作用域：仅 com.hihonor.servicecenter（见 xposedscope）。
  */
 class QuickGestureHook : IXposedHookLoadPackage {
@@ -65,6 +67,12 @@ class QuickGestureHook : IXposedHookLoadPackage {
         private const val FROM_TAG_GESTURE = "LauncherScroll"
         private val LOG_FILE = File("/sdcard/Download/quickgesture_probe.log")
 
+        // v1.6.2：诊断主落点收进工具箱目录（与 navwake.log /
+        // palmpurify.log 同处，方便一并取证）；旧路径继续双写，
+        // 老口径找日志的人不受影响。
+        private val LOG_FILE_TOOLBOX = File("/sdcard/Download/HonorToolbox/quickgesture.log")
+        private val logLock = Any()
+
         /** 诊断输出：XposedBridge.log + 文件双通道；写文件失败不影响宿主。 */
         fun diag(message: String) {
             try {
@@ -72,14 +80,16 @@ class QuickGestureHook : IXposedHookLoadPackage {
             } catch (t: Throwable) {
                 // ignore
             }
-            try {
-                synchronized(LOG_FILE) {
-                    LOG_FILE.appendText(
-                        "${System.currentTimeMillis()} $TAG $message\n"
-                    )
+            val line = "${System.currentTimeMillis()} $TAG $message\n"
+            synchronized(logLock) {
+                for (file in listOf(LOG_FILE_TOOLBOX, LOG_FILE)) {
+                    try {
+                        file.parentFile?.mkdirs()
+                        file.appendText(line)
+                    } catch (t: Throwable) {
+                        // 写失败不影响 hook
+                    }
                 }
-            } catch (t: Throwable) {
-                // 写失败不影响 hook
             }
         }
     }
@@ -129,6 +139,20 @@ class QuickGestureHook : IXposedHookLoadPackage {
                 "installed in $TARGET_PACKAGE " +
                     "(module ${BuildConfig.VERSION_NAME}), hooks: " +
                     "LauncherActivity.onCreate/onNewIntent"
+            )
+            // v1.6.2：安装时把 hook 侧读到的配置原样记一行——
+            // 设置页显示与 hook 实际读到的是否一致，一眼可查
+            // （v1.6.1 真机反馈改向不生效，先要分清是没装上、
+            // 没读到配置，还是 from_tag 没命中）。
+            val atInstall = ConfigStore.readConfig()
+            diag(
+                if (atInstall == null) {
+                    "config at install: unreadable/none -> PASS until configured"
+                } else {
+                    "config at install: enabled=${atInstall.enabled} " +
+                        "mode=${atInstall.mode} pkg=${atInstall.pkg} " +
+                        "act=${atInstall.activity}"
+                }
             )
         } catch (t: Throwable) {
             diag("install FAILED: ${t.javaClass.name}: ${t.message}")

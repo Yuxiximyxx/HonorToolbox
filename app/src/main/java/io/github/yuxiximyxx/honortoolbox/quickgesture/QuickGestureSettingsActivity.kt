@@ -424,7 +424,7 @@ private fun HomePage(
 
             Spacer(Modifier.height(16.dp))
             Text(
-                "版本 ${BuildConfig.VERSION_NAME} · 诊断日志在 Download/quickgesture_probe.log",
+                "版本 ${BuildConfig.VERSION_NAME} · 诊断日志在 Download/HonorToolbox/quickgesture.log",
                 fontSize = 12.sp,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             )

@@ -23,7 +23,6 @@ import io.github.yuxiximyxx.honortoolbox.navwake.config.AppTargets
 import io.github.yuxiximyxx.honortoolbox.navwake.config.NavConfig
 import io.github.yuxiximyxx.honortoolbox.navwake.config.Packages
 import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Checkbox
@@ -33,6 +32,7 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -110,6 +110,16 @@ internal fun NavWakeScreen(onBack: () -> Unit, bottomInset: Dp = 0.dp) {
                             )
                             BasicComponent(
                                 summary = "改完这个开关，要回工具箱首页，在「重启作用域」里点「重启系统界面」才会生效"
+                            )
+                        }
+                    }
+                }
+                if (NavWakeStore.lastSyncOk == false) {
+                    item {
+                        Card(modifier = Modifier.padding(horizontal = 12.dp)) {
+                            BasicComponent(
+                                summary = "配置同步落盘失败：开关与目标是靠落盘文件传给系统界面进程的，" +
+                                    "这次没写成功，请再操作一次（v1.6.2 起明示，原先是静默失败）"
                             )
                         }
                     }
@@ -220,7 +230,9 @@ internal fun NavWakeScreen(onBack: () -> Unit, bottomInset: Dp = 0.dp) {
                                 summary = Packages.ALL.joinToString("\n")
                             )
                             BasicComponent(
-                                summary = "日志：/data/adb/lspd/log/modules_*.log（不是 logcat）"
+                                summary = "日志：Download/HonorToolbox/navwake.log" +
+                                    "（v1.6.2 起 hook 安装与每次拦截判定都落这份文件）；" +
+                                    "另有 LSPosed 日志 /data/adb/lspd/log/modules_*.log"
                             )
                             BasicComponent(
                                 title = "复制日志路径",
@@ -249,6 +261,15 @@ internal fun NavWakeScreen(onBack: () -> Unit, bottomInset: Dp = 0.dp) {
         var checked by remember {
             mutableStateOf(AppTargets.selectedPackages().toSet())
         }
+        // v1.6.2：保存动作移到顶栏右上角，底部固定区整个取消、
+        // 列表占满整页（v1.6.1 的底部固定按钮区要在页脚留出一
+        // 大条黑边，小乐点名难看）。保存逻辑与原按钮完全一致：
+        // 保持列表展示顺序（按应用名排序后的顺序）落盘。
+        fun save() {
+            val ordered = apps.filter { it.pkg in checked }.map { it.pkg }
+            AppTargets.saveSelectedPackages(context, ordered)
+            onDone()
+        }
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -257,61 +278,44 @@ internal fun NavWakeScreen(onBack: () -> Unit, bottomInset: Dp = 0.dp) {
                         IconButton(onClick = onDone) {
                             Icon(imageVector = MiuixIcons.Back, contentDescription = "返回")
                         }
+                    },
+                    actions = {
+                        TextButton(
+                            text = "保存",
+                            onClick = { save() },
+                            colors = ButtonDefaults.textButtonColorsPrimary(),
+                        )
                     }
                 )
             }
         ) { padding ->
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(top = padding.calculateTopPadding())
+                    .overScrollVertical()
+                    .scrollEndHaptic(),
+                // 只留滚动到底时的防遮挡余量（与其它页同口径），
+                // 不再有为固定按钮留的整条底区。
+                contentPadding = PaddingValues(bottom = 24.dp + bottomInset),
             ) {
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .overScrollVertical()
-                        .scrollEndHaptic(),
-                    contentPadding = PaddingValues(bottom = bottomInset),
-                ) {
-                    items(apps) { app ->
-                        val isChecked = app.pkg in checked
-                        BasicComponent(
-                            title = app.label,
-                            summary = app.pkg,
-                            endActions = {
-                                Checkbox(
-                                    checked = isChecked,
-                                    onCheckedChange = { v ->
-                                        checked = if (v) checked + app.pkg else checked - app.pkg
-                                    }
-                                )
-                            },
-                            onClick = {
-                                checked = if (isChecked) checked - app.pkg else checked + app.pkg
-                            }
-                        )
-                    }
-                }
-                Button(
-                    // v1.6.1：底部留白按宿主既有公式补 bottomInset
-                    // （栏高+间隙+呼吸+导航条 inset 已由宿主算好
-                    // 传入）——原先只有 16.dp，按钮是固定底区、
-                    // 悬浮底栏正压在它上半截（小乐截图实证）。
-                    modifier = Modifier.padding(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 16.dp,
-                        bottom = 16.dp + bottomInset,
-                    ),
-                    colors = ButtonDefaults.buttonColorsPrimary(),
-                    onClick = {
-                        // 保持列表展示顺序（按应用名排序后的顺序）保存
-                        val ordered = apps.filter { it.pkg in checked }.map { it.pkg }
-                        AppTargets.saveSelectedPackages(context, ordered)
-                        onDone()
-                    }
-                ) {
-                    Text(text = "保存")
+                items(apps) { app ->
+                    val isChecked = app.pkg in checked
+                    BasicComponent(
+                        title = app.label,
+                        summary = app.pkg,
+                        endActions = {
+                            Checkbox(
+                                checked = isChecked,
+                                onCheckedChange = { v ->
+                                    checked = if (v) checked + app.pkg else checked - app.pkg
+                                }
+                            )
+                        },
+                        onClick = {
+                            checked = if (isChecked) checked - app.pkg else checked + app.pkg
+                        }
+                    )
                 }
             }
         }

@@ -27,8 +27,8 @@ android {
         applicationId = "io.github.yuxiximyxx.honortoolbox"
         minSdk = 34   // Android 14 (MagicOS 8 起，与 MagicPods 一致)
         targetSdk = 35
-        versionCode = 14
-        versionName = "1.6.1"
+        versionCode = 15
+        versionName = "1.6.2"
         // 资源库增强（LibraryPlus 合入）带 DexKit 原生库，只留 arm64
         ndk { abiFilters += listOf("arm64-v8a") }
     }

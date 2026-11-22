@@ -31,12 +31,19 @@ import java.io.File
  * versionCode 不低于当前安装版本 → 已激活；文件在但
  * versionCode 落后 → 旧版 hook 还在宿主里跑（中间
  * 态）；两者皆无 → 未激活。
+ *
+ * v1.6.2：原先所有宿主共写一份 activation_status.txt、
+ * 互相覆盖，只能看出「最后一个加载的宿主是谁」。改为
+ * 每宿主一份 activation_status_<宿主包名>.txt 并存（旧
+ * 的单文件继续写、兼容既有读取），哪个宿主的 hook 活着
+ * 逐个可查——这是三条 hook 链真机不生效时下轮诊断的
+ * 第一抓手。读取侧合并所有候选、取 versionCode 最高
+ * 的一份做三态判定，口径与原来一致。
  */
 object ActivationStatus {
 
     private const val REL_DIR = "Download/HonorToolbox"
     private const val FILE_NAME = "activation_status.txt"
-    private const val DIRECT_PATH = "/sdcard/Download/HonorToolbox/activation_status.txt"
     private val CANDIDATE_NAME = Regex("""activation_status( \(\d+\))?\.txt""")
     private val FILES_URI: Uri = MediaStore.Files.getContentUri("external")
 
@@ -47,13 +54,19 @@ object ActivationStatus {
         runCatching {
             val dir = File("/sdcard/Download/HonorToolbox")
             dir.mkdirs()
-            File(dir, FILE_NAME).writeText(
-                "versionCode=${BuildConfig.VERSION_CODE}\n" +
-                    "host=$hostPackage\n" +
-                    "time=${System.currentTimeMillis()}\n",
-            )
+            val content = "versionCode=${BuildConfig.VERSION_CODE}\n" +
+                "host=$hostPackage\n" +
+                "time=${System.currentTimeMillis()}\n"
+            // 旧单文件：继续写，兼容既有读取与人工查看习惯
+            File(dir, FILE_NAME).writeText(content)
+            // v1.6.2：每宿主一份，不再互相覆盖
+            File(dir, perHostFileName(hostPackage)).writeText(content)
         }
     }
+
+    /** 每宿主状态文件名（包名只含字母数字与点，直接拼安全）。 */
+    private fun perHostFileName(hostPackage: String): String =
+        "activation_status_$hostPackage.txt"
 
     /** 设置侧：没有自有候选时经 MediaStore 占位建一份（已有则不动）。 */
     fun ensurePlaceholder(context: Context) {
@@ -73,9 +86,22 @@ object ActivationStatus {
 
     /** 设置侧读状态文件；读不到或内容无有效 versionCode 返回 null。 */
     fun read(context: Context): FileInfo? {
-        // 直路：自有文件与宽松 ROM 下可读
+        val found = ArrayList<FileInfo>()
+        // 直路：旧单文件 + v1.6.2 起的每宿主文件，自有文件与
+        // 宽松 ROM 下可读；全部收齐后取 versionCode 最高的一份
         runCatching {
-            parse(File(DIRECT_PATH).readText())?.let { return it }
+            val dir = File("/sdcard/Download/HonorToolbox")
+            val files = dir.listFiles()?.filter { f ->
+                f.isFile && f.name.startsWith("activation_status") && f.name.endsWith(".txt")
+            } ?: emptyList()
+            for (f in files) {
+                runCatching { parse(f.readText()) }.getOrNull()?.let { found += it }
+            }
+        }
+        if (found.isNotEmpty()) {
+            return found.maxWithOrNull(
+                compareBy<FileInfo> { it.versionCode }.thenBy { it.timeMillis ?: 0L }
+            )
         }
         // MediaStore 自有候选，新的优先，取第一份能解析的
         for (own in ownCandidates(context)) {

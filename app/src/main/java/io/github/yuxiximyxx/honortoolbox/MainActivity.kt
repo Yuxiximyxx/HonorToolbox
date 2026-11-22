@@ -26,6 +26,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -138,9 +139,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarDisplayMode
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
@@ -149,9 +154,12 @@ import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.extra.SuperArrow
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.All
+import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.GridView
 import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.icon.extended.Refresh
@@ -160,6 +168,8 @@ import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
+import top.yukonga.miuix.kmp.utils.overScrollVertical
+import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 /**
  * 荣耀工具箱单一宿主。v1.2.0 按小乐拍板的信息架构重排：
@@ -315,6 +325,9 @@ private enum class SystemPage { Root, QuickGesture, NavWake, Shade, NightIcon, L
 /** 「应用」页内部页：总览 / 掌盟净化设置子页（v1.6.0）。 */
 private enum class AppsPage { Root, PalmPurify }
 
+/** 首页内部页：总览 / 按功能分组的重启作用域页（v1.6.2）。 */
+private enum class HomePage { Root, ScopeRestart }
+
 /** 首页大卡的激活三态（v1.2.3）：已激活 / 旧版 hook 还在跑 / 未激活。 */
 private enum class ActivationUiState { Active, ActiveOld, Inactive }
 
@@ -354,6 +367,7 @@ private fun ToolboxHost(
     var tab by remember { mutableStateOf(ToolboxTab.Home) }
     var systemPage by remember { mutableStateOf(SystemPage.Root) }
     var appsPage by remember { mutableStateOf(AppsPage.Root) }
+    var homePage by remember { mutableStateOf(HomePage.Root) }
     var showAbout by remember { mutableStateOf(false) }
 
     // ── 各功能总开关快照（首页计数与系统页开关共用一份）──
@@ -446,6 +460,9 @@ private fun ToolboxHost(
     // 系统页子页的返回：各子页自己的返回处理优先（快服务页内
     // 二级页、通知中心页内二级页都有自己的 BackHandler，注册
     // 更晚者先响应）；落到这里时回系统页总览。
+    BackHandler(enabled = tab == ToolboxTab.Home && homePage != HomePage.Root) {
+        homePage = HomePage.Root
+    }
     BackHandler(enabled = tab == ToolboxTab.System && systemPage != SystemPage.Root) {
         systemPage = SystemPage.Root
     }
@@ -468,18 +485,25 @@ private fun ToolboxHost(
     @Composable
     fun TabContent() {
         when (tab) {
-            ToolboxTab.Home -> HomeScreen(
-                state = state,
-                syncHint = syncHint,
-                activationState = activationState,
-                activationFileVersion = activationFile?.versionCode,
-                scopeCount = scopeCount,
-                bottomInset = bottomInset,
-                onOpenLsposed = { openLsposedManager(context) },
-                onRestartSystemUi = { restartSystemUi(context, scope) },
-                onRestartLauncher = { restartLauncher(context, scope) },
-                onForceStopServiceCenter = { forceStopServiceCenter(context, scope) },
-            )
+            ToolboxTab.Home -> when (homePage) {
+                HomePage.Root -> HomeScreen(
+                    state = state,
+                    syncHint = syncHint,
+                    activationState = activationState,
+                    activationFileVersion = activationFile?.versionCode,
+                    scopeCount = scopeCount,
+                    bottomInset = bottomInset,
+                    onOpenLsposed = { openLsposedManager(context) },
+                    onRestartSystemUi = { restartSystemUi(context, scope) },
+                    onRestartLauncher = { restartLauncher(context, scope) },
+                    onForceStopServiceCenter = { forceStopServiceCenter(context, scope) },
+                    onOpenScopeRestart = { homePage = HomePage.ScopeRestart },
+                )
+                HomePage.ScopeRestart -> ScopeRestartScreen(
+                    onBack = { homePage = HomePage.Root },
+                    bottomInset = bottomInset,
+                )
+            }
             ToolboxTab.System -> when (systemPage) {
                 SystemPage.Root -> SystemScreen(
                     state = state,
@@ -1136,6 +1160,7 @@ private fun HomeScreen(
     onRestartSystemUi: () -> Unit,
     onRestartLauncher: () -> Unit,
     onForceStopServiceCenter: () -> Unit,
+    onOpenScopeRestart: () -> Unit,
 ) {
     val enabledCount = listOf(
         state.quickgestureEnabled,
@@ -1323,6 +1348,12 @@ private fun HomeScreen(
                         summary = "快服务手势改向首次启用作用域后点它",
                         onClick = onForceStopServiceCenter,
                     )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    SuperArrow(
+                        title = "全部作用域",
+                        summary = "按功能分组勾选宿主、批量重启（v1.6.2）",
+                        onClick = onOpenScopeRestart,
+                    )
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -1446,6 +1477,338 @@ private fun RestartRow(
             )
         },
     )
+}
+
+// ── 重启作用域页（v1.6.2，小乐按药师·荣耀高级设置的同名页点名） ──
+
+/** 一个宿主条目：包名 + 它在本组里被哪个功能引用（行内小字）。 */
+private data class ScopeHost(val pkg: String, val refNote: String)
+
+/** 一个功能分组（与 ToolboxHook 的宿主分发逐项核对，见下）。 */
+private data class ScopeGroup(val title: String, val hosts: List<ScopeHost>)
+
+/**
+ * 分组与宿主全清单。数据源 = 清单里的 xposedscope 全量
+ * 14 项去掉工具箱自身（自身包名只是激活自检标记、不是任何
+ * 功能的 hook 宿主，不列），其余 13 个宿主按功能分组；同一
+ * 宿主被多个功能用时在各组里都列（药师同款做法）：
+ * - 通知中心主题：systemui 本体 + launcher 只读探针
+ *   （ShadeClockHook 的两个分发分支）；
+ * - 手势与唤醒：快服务改向的 servicecenter + 长按唤醒的
+ *   systemui 两个包名候选与 magicvoice/brain（后两者只在
+ *   探针模式下装 hook，行内标明）；
+ * - 桌面：launcher（日夜图标 + 资源库增强 + 通知中心主题
+ *   探针共用）+ 资源库的 hiboard/search；
+ * - 耳机：Free4/XM4 的五个宿主（systemui 内的状态栏图标/
+ *   控制中心卡 + 蓝牙/耳机服务/SWS/控制中心四进程，与
+ *   ToolboxHook 分发一致）；
+ * - 掌盟净化：com.tencent.qt.qtl。
+ */
+private val SCOPE_GROUPS: List<ScopeGroup> = listOf(
+    ScopeGroup(
+        "通知中心主题",
+        listOf(
+            ScopeHost("com.android.systemui", "通知中心主题"),
+            ScopeHost("com.hihonor.android.launcher", "通知中心主题 · 桌面只读探针"),
+        ),
+    ),
+    ScopeGroup(
+        "手势与唤醒",
+        listOf(
+            ScopeHost("com.hihonor.servicecenter", "快服务手势改向"),
+            ScopeHost("com.android.systemui", "长按导航条唤醒"),
+            ScopeHost("com.hihonor.systemui", "长按导航条唤醒"),
+            ScopeHost("com.hihonor.magicvoice", "长按导航条唤醒 · 仅探针模式"),
+            ScopeHost("com.hihonor.brain", "长按导航条唤醒 · 仅探针模式"),
+        ),
+    ),
+    ScopeGroup(
+        "桌面",
+        listOf(
+            ScopeHost("com.hihonor.android.launcher", "日夜图标 / 资源库增强"),
+            ScopeHost("com.hihonor.hiboard", "资源库增强"),
+            ScopeHost("com.hihonor.search", "资源库增强"),
+        ),
+    ),
+    ScopeGroup(
+        "耳机",
+        listOf(
+            ScopeHost("com.android.systemui", "耳机状态栏图标 / 控制中心卡"),
+            ScopeHost("com.android.bluetooth", "Free4 / XM4 蓝牙协议"),
+            ScopeHost("com.hihonor.audioaccessorymanager", "Free4 / XM4 设备面板"),
+            ScopeHost("com.hihonor.imedia.sws", "Free4 / XM4 媒体输出"),
+            ScopeHost("com.hihonor.controlcenter", "Free4 / XM4 设备中心卡"),
+        ),
+    ),
+    ScopeGroup(
+        "掌盟净化",
+        listOf(
+            ScopeHost("com.tencent.qt.qtl", "掌盟净化"),
+        ),
+    ),
+)
+
+/** 宿主在本机的应用名；没装返回 null（页面据此标未安装、禁勾选）。 */
+private fun scopeHostLabel(context: Context, pkg: String): String? = runCatching {
+    val pm = context.packageManager
+    pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+}.getOrNull()
+
+/**
+ * 重启单个宿主（与首页四行快捷重启同一套通道）：
+ * - 系统界面走 restart.txt 令牌（SystemUI 看守自杀重拉，
+ *   不依赖 root，与「重启系统界面」行同机制）；
+ * - 桌面首选 root 强停、兜底日夜图标的 restart_token
+ *   （与「重启桌面」行同机制）；
+ * - 其余宿主走 root `am force-stop`（与「强停快服务」行
+ *   同机制），root 不可用即失败、由页面提示手动强停。
+ * 返回 true = 请求已发出/已执行。
+ */
+private fun restartScopeHost(context: Context, pkg: String): Boolean = when (pkg) {
+    "com.android.systemui" -> ThemeStore.writeRestartRequest(context)
+    "com.hihonor.android.launcher" ->
+        forceStopViaRoot(pkg) || writeLauncherRestartToken(context)
+    else -> forceStopViaRoot(pkg)
+}
+
+/**
+ * 「全部作用域」页：按功能分组列全部 hook 宿主（应用名 +
+ * 包名 + 引用注记），逐行勾选、每组可整组勾/清，页尾
+ * 全选/取消全选 + 「重启选中」统一执行，执行后逐行回显
+ * 结果并给汇总。入口只在首页重启卡（全应用唯一重启入口
+ * 的定版不变）；页尾操作区随列表同滚、不做固定底栏——
+ * 固定底区刚在选应用页被点名难看，这里不重蹈。
+ */
+@Composable
+private fun ScopeRestartScreen(onBack: () -> Unit, bottomInset: Dp = 0.dp) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    // 勾选键 = 「组序:包名」：同一宿主在多组出现时各算一行，
+    // 执行时按包名去重只重启一次、结果按包名回显到每一行。
+    val labels = remember {
+        SCOPE_GROUPS.flatMap { it.hosts }.map { it.pkg }.distinct()
+            .associateWith { scopeHostLabel(context, it) }
+    }
+    var checked by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var running by remember { mutableStateOf(false) }
+    var results by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+
+    fun key(groupIndex: Int, pkg: String) = "$groupIndex:$pkg"
+    fun groupKeys(groupIndex: Int): List<String> =
+        SCOPE_GROUPS[groupIndex].hosts
+            .filter { labels[it.pkg] != null }
+            .map { key(groupIndex, it.pkg) }
+    val selectedPkgs = checked.map { it.substringAfter(':') }.distinct()
+
+    Scaffold(
+        containerColor = MiuixTheme.colorScheme.surface,
+        topBar = {
+            TopAppBar(
+                title = "重启作用域",
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(imageVector = MiuixIcons.Back, contentDescription = "返回")
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = padding.calculateTopPadding())
+                .overScrollVertical()
+                .scrollEndHaptic(),
+            contentPadding = PaddingValues(bottom = 24.dp + bottomInset),
+        ) {
+            item {
+                Text(
+                    "勾选要重启的宿主进程，改完设置的的功能靠重启对应宿主生效。" +
+                        "系统界面走令牌重启、桌面有令牌兜底，其余宿主走 root 强停；" +
+                        "没有 root 的宿主会执行失败，请到系统设置里手动强停。",
+                    fontSize = 13.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+            SCOPE_GROUPS.forEachIndexed { groupIndex, group ->
+                item(key = "group-$groupIndex") {
+                    Column {
+                        SmallTitle(
+                            text = group.title,
+                            insideMargin = PaddingValues(start = 4.dp, top = 16.dp),
+                        )
+                        Card(modifier = Modifier.padding(horizontal = 12.dp)) {
+                            Column {
+                                val gKeys = groupKeys(groupIndex)
+                                val groupAll = gKeys.isNotEmpty() && gKeys.all { it in checked }
+                                BasicComponent(
+                                    title = "全选本组",
+                                    summary = "${gKeys.size} 个可重启宿主",
+                                    endActions = {
+                                        Checkbox(
+                                            checked = groupAll,
+                                            onCheckedChange = { v ->
+                                                checked = if (v) {
+                                                    checked + gKeys
+                                                } else {
+                                                    checked - gKeys.toSet()
+                                                }
+                                                results = emptyMap()
+                                            },
+                                        )
+                                    },
+                                    onClick = {
+                                        checked = if (groupAll) {
+                                            checked - gKeys.toSet()
+                                        } else {
+                                            checked + gKeys
+                                        }
+                                        results = emptyMap()
+                                    },
+                                )
+                                group.hosts.forEach { host ->
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(horizontal = 16.dp)
+                                    )
+                                    val label = labels[host.pkg]
+                                    val installed = label != null
+                                    val k = key(groupIndex, host.pkg)
+                                    val result = results[host.pkg]
+                                    BasicComponent(
+                                        title = label ?: host.pkg,
+                                        summary = buildString {
+                                            if (installed && label != host.pkg) {
+                                                append(host.pkg).append(" · ")
+                                            }
+                                            append(host.refNote)
+                                            if (!installed) append(" · 未安装")
+                                            if (result != null) {
+                                                append(if (result) " · 已重启" else " · 重启失败")
+                                            }
+                                        },
+                                        enabled = installed,
+                                        endActions = {
+                                            Checkbox(
+                                                checked = k in checked,
+                                                onCheckedChange = { v ->
+                                                    if (installed) {
+                                                        checked = if (v) {
+                                                            checked + k
+                                                        } else {
+                                                            checked - k
+                                                        }
+                                                        results = emptyMap()
+                                                    }
+                                                },
+                                            )
+                                        },
+                                        onClick = {
+                                            if (installed) {
+                                                checked = if (k in checked) {
+                                                    checked - k
+                                                } else {
+                                                    checked + k
+                                                }
+                                                results = emptyMap()
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            item(key = "actions") {
+                Column(modifier = Modifier.padding(horizontal = 12.dp)) {
+                    Spacer(Modifier.height(20.dp))
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        TextButton(
+                            text = "全选",
+                            onClick = {
+                                checked = SCOPE_GROUPS.indices
+                                    .flatMap { groupKeys(it) }.toSet()
+                                results = emptyMap()
+                            },
+                            modifier = Modifier.weight(1f),
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        TextButton(
+                            text = "取消全选",
+                            onClick = {
+                                checked = emptySet()
+                                results = emptyMap()
+                            },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            val targets = selectedPkgs
+                            if (targets.isEmpty() || running) return@Button
+                            running = true
+                            scope.launch {
+                                val out = LinkedHashMap<String, Boolean>()
+                                for (pkg in targets) {
+                                    out[pkg] = withContext(Dispatchers.IO) {
+                                        restartScopeHost(context, pkg)
+                                    }
+                                }
+                                results = out
+                                running = false
+                                val okCount = out.values.count { it }
+                                Toast.makeText(
+                                    context,
+                                    "已重启 $okCount 个宿主" +
+                                        if (okCount < out.size) {
+                                            "，${out.size - okCount} 个失败（无 root 时请到系统设置手动强停）"
+                                        } else {
+                                            ""
+                                        },
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                            }
+                        },
+                        enabled = selectedPkgs.isNotEmpty() && !running,
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        cornerRadius = 16.dp,
+                        minHeight = 52.dp,
+                        colors = ButtonDefaults.buttonColorsPrimary(),
+                    ) {
+                        Text(
+                            text = when {
+                                running -> "正在重启…"
+                                selectedPkgs.isEmpty() -> "重启选中"
+                                else -> "重启选中（${selectedPkgs.size}）"
+                            },
+                            color = Color.White,
+                            fontSize = 16.sp,
+                        )
+                    }
+                    if (results.isNotEmpty()) {
+                        val okCount = results.values.count { it }
+                        Text(
+                            "上次执行：成功 $okCount / ${results.size}" +
+                                if (okCount < results.size) {
+                                    "；失败的宿主多半是本机没有 root，请到系统设置里手动强停"
+                                } else {
+                                    ""
+                                },
+                            fontSize = 13.sp,
+                            color = if (okCount == results.size) {
+                                MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            } else {
+                                Color(0xFFE5484D)
+                            },
+                            modifier = Modifier.padding(start = 4.dp, top = 12.dp, end = 4.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 /**

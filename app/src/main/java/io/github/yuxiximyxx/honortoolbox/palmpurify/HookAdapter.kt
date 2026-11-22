@@ -81,6 +81,7 @@ object XposedModule {
     }
 
     private fun emit(priority: Int, tag: String, message: String, throwable: Throwable?) {
+        fileLog(tag, message, throwable)
         runCatching {
             if (throwable != null) {
                 XposedBridge.log("$tag: $message\n${Log.getStackTraceString(throwable)}")
@@ -93,6 +94,41 @@ object XposedModule {
                 Log.println(priority, tag, "$message\n${Log.getStackTraceString(throwable)}")
             } else {
                 Log.println(priority, tag, message)
+            }
+        }
+    }
+
+    // ── 落盘诊断（v1.6.2 新增） ─────────────────────────────────
+    // 四组 hook 的日志都经 emit 出去，这里统一再落一份到
+    // /sdcard/Download/HonorToolbox/palmpurify.log：v1.6.1
+    // 真机反馈开屏没屏蔽、底栏精简没生效，而原日志只在
+    // LSPosed/logcat 里，定不了案。同一行 2 秒内重复只记
+    // 一次防刷屏；文件超 1MB 整份重开；写失败静默。
+    private val LOG_FILE = File("/sdcard/Download/HonorToolbox/palmpurify.log")
+    private const val FILE_CAP_BYTES = 1_000_000L
+    private const val DEDUPE_WINDOW_MS = 2_000L
+    private val fileLock = Any()
+    private val recentLines = HashMap<String, Long>()
+
+    private fun fileLog(tag: String, message: String, throwable: Throwable?) {
+        runCatching {
+            val key = "$tag|$message"
+            val now = System.currentTimeMillis()
+            synchronized(fileLock) {
+                val last = recentLines[key]
+                if (last != null && now - last < DEDUPE_WINDOW_MS) return
+                recentLines[key] = now
+                if (recentLines.size > 256) recentLines.clear()
+                LOG_FILE.parentFile?.mkdirs()
+                if (LOG_FILE.exists() && LOG_FILE.length() > FILE_CAP_BYTES) {
+                    LOG_FILE.delete()
+                }
+                val sb = StringBuilder()
+                sb.append(now).append(' ').append(tag).append(": ").append(message).append('\n')
+                if (throwable != null) {
+                    sb.append(Log.getStackTraceString(throwable)).append('\n')
+                }
+                LOG_FILE.appendText(sb.toString())
             }
         }
     }
