@@ -6,6 +6,7 @@ import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_InitPackageResources
 import de.robv.android.xposed.callbacks.XC_LoadPackage
+import io.github.yuxiximyxx.honortoolbox.betterheybox.BetterHeyboxHook
 import io.github.yuxiximyxx.honortoolbox.libraryplus.hook.LibraryPlusHook
 import io.github.yuxiximyxx.honortoolbox.magicpods.hook.MagicPodsHook
 import io.github.yuxiximyxx.honortoolbox.magicxm4.hook.MagicXm4Hook
@@ -39,6 +40,10 @@ import io.github.yuxiximyxx.honortoolbox.shadeclock.ShadeClockHook
  *   与资源库同口径不经 FeatureGate——原模块无总开关、各功能
  *   开关即门控，FilePrefs 现读；旧配置 hook 侧导出、设置
  *   子页导入，见 palmpurify/PalmMigration）。
+ * - com.max.xiaoheihe：小黑盒增强（BetterHeybox，v1.7.0 合入；
+ *   YukiHook 声明式 hook 经适配层译成传统 API、各功能开关
+ *   即门控不经 FeatureGate，配置走 Provider 直供，见
+ *   betterheybox/BetterHeyboxHook）。
  */
 class ToolboxHook : IXposedHookLoadPackage, IXposedHookInitPackageResources {
 
@@ -115,6 +120,12 @@ class ToolboxHook : IXposedHookLoadPackage, IXposedHookInitPackageResources {
                 // 装钩、各功能开关 FilePrefs 现读为门控，口径见
                 // 文件头。
                 PalmPurifyHook.install(lpparam)
+            }
+            "com.max.xiaoheihe" -> {
+                // 小黑盒增强（BetterHeybox 合入，v1.7.0）：原模块
+                // 在小黑盒全部进程装载（与原 Yuki 入口同口径），
+                // 开关即门控、配置 Provider 现读，见 BetterHeyboxHook。
+                BetterHeyboxHook.install(lpparam)
             }
         }
         // 激活状态文件（v1.2.3）：分发到功能宿主并跑完该分支

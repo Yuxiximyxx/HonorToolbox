@@ -29,6 +29,8 @@
         <item>com.hihonor.imedia.sws</item>
         <item>com.hihonor.controlcenter</item>
         <item>com.tencent.qt.qtl</item>
+        <!-- 小黑盒增强（BetterHeybox 合入，v1.7.0） -->
+        <item>com.max.xiaoheihe</item>
     </string-array>
 
     <!-- 图标日夜切换（原 NightIcon 设置项文案，ni_ 前缀防冲突；

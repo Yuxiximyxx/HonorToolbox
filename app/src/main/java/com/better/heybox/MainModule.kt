@@ -1,0 +1,842 @@
+package com.better.heybox
+
+import android.app.Activity
+import android.content.Context
+import android.content.SharedPreferences
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
+import android.content.res.Resources
+import android.os.Build
+import android.os.SystemClock
+import android.util.Log
+import com.better.heybox.hooks.AdFilterHook
+import com.better.heybox.hooks.BottomTabHook
+import com.better.heybox.hooks.BottomTabUpdateHook
+import com.better.heybox.hooks.BrowserRedirectHook
+import com.better.heybox.hooks.CommentCopyHook
+import com.better.heybox.hooks.CommentFilterHook
+import com.better.heybox.hooks.CommentInputDockHook
+import com.better.heybox.hooks.CommentSharePanelHook
+import com.better.heybox.hooks.DailyTaskHook
+import com.better.heybox.hooks.FakeUsageAccessHook
+import com.better.heybox.hooks.FavourAutoCleanHook
+import com.better.heybox.hooks.FeedBannerHook
+import com.better.heybox.hooks.FeedRefreshUndoHook
+import com.better.heybox.hooks.GameLibraryCleanHook
+import com.better.heybox.hooks.GeneralHook
+import com.better.heybox.hooks.ImageCacheDirHook
+import com.better.heybox.hooks.ImageOriginalHook
+import com.better.heybox.hooks.ImageShareHook
+import com.better.heybox.hooks.LiquidGlassBottomBarHook
+import com.better.heybox.hooks.MessageRedDotHook
+import com.better.heybox.hooks.MyTaskHook
+import com.better.heybox.hooks.PostDetailCleanHook
+import com.better.heybox.hooks.PostFilterHook
+import com.better.heybox.hooks.PromotePostHook
+import com.better.heybox.hooks.ScanShortcutHook
+import com.better.heybox.hooks.ScreenshotCaptureHook
+import com.better.heybox.hooks.SearchContextTracker
+import com.better.heybox.hooks.SearchPageCleanHook
+import com.better.heybox.hooks.SettingsEntryHook
+import com.better.heybox.hooks.ShareLinkPurifyHook
+import com.better.heybox.hooks.SingleColumnFeedHook
+import com.better.heybox.hooks.SubCommentExpandHook
+import com.better.heybox.hooks.TargetHintHook
+import com.better.heybox.hooks.TextSelectHook
+import com.better.heybox.hooks.VideoDownloadHook
+import com.better.heybox.hooks.WatchHook
+import com.better.heybox.hooks.WebViewDevToolsHook
+import com.better.heybox.liquidglass.LiquidGlassHookBridge
+import com.highcapable.yukihookapi.hook.core.api.priority.YukiHookPriority
+import com.highcapable.yukihookapi.hook.log.YLog
+import com.highcapable.yukihookapi.hook.param.HookChain
+import com.highcapable.yukihookapi.hook.param.PackageParam
+import java.lang.reflect.Member
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.max
+
+class MainModule private constructor(private val param: PackageParam) {
+
+    private var dailyTaskHook: DailyTaskHook? = null
+
+    private var myTaskHook: MyTaskHook? = null
+
+    private val scanShortcutHook = ScanShortcutHook(this) { isEnabled(App.KEY_SCAN_SHORTCUT, false) }
+
+    @Volatile
+    private var targetClassLoader: ClassLoader? = param.hostClassLoader
+
+    private val hookSpecs: MutableList<HookSpec> = CopyOnWriteArrayList()
+
+    private val pendingHookCount = AtomicInteger()
+
+    fun hook(member: Member): HookHandle = HookHandle(member)
+
+    inner class HookHandle(private val member: Member) {
+
+        fun intercept(body: (HookChain) -> Any?) {
+            with(param) {
+                member.intercept(YukiHookPriority.DEFAULT) {
+                    body(this)
+                }
+            }
+        }
+    }
+
+
+
+
+    fun probe(member: Member, onHit: Runnable) {
+        with(param) {
+            member.intercept(YukiHookPriority.HIGHEST) {
+                onHit.run()
+                proceed()
+            }
+        }
+    }
+
+    private fun legacyPreferences(): SharedPreferences? = try {
+        val prefs = param.preferences(App.PREFS_GROUP)
+        prefs.javaClass.getMethod("getCurrent\$yukihook_core").invoke(prefs) as SharedPreferences
+    } catch (t: Throwable) {
+        null
+    }
+
+    fun getModuleApplicationInfo(): ApplicationInfo = param.module.appInfo
+
+    fun release() {
+        val taskHook = myTaskHook
+        myTaskHook = null
+        taskHook?.shutdown()
+
+    }
+
+
+    private fun log(level: Int, tag: String, msg: String) {
+        frameworkLog(level, tag, msg, null)
+    }
+
+    private fun log(level: Int, tag: String, msg: String, tr: Throwable) {
+        frameworkLog(level, tag, msg, tr)
+    }
+
+    private fun frameworkLog(level: Int, tag: String, msg: String, tr: Throwable?) {
+        when (level) {
+            android.util.Log.DEBUG -> YLog.debug(msg, tr, tag, YLog.EnvType.BOTH)
+            android.util.Log.INFO -> YLog.info(msg, tr, tag, YLog.EnvType.BOTH)
+            android.util.Log.WARN -> YLog.warn(msg, tr, tag, YLog.EnvType.BOTH)
+            else -> YLog.error(msg, tr, tag, YLog.EnvType.BOTH)
+        }
+    }
+
+    private fun deferInstallForDowngradeCheck() {
+        try {
+            val cl = targetClassLoader
+            val appCls = Class.forName("android.app.Application", false, cl)
+            val onCreate = appCls.getDeclaredMethod("onCreate")
+            val decided = AtomicBoolean(false)
+            hook(onCreate).intercept { chain ->
+                chain.proceed()
+                if (decided.compareAndSet(false, true)) {
+                    activateIfNotDowngraded(chain.instanceOrNull)
+                }
+                null
+            }
+        } catch (t: Throwable) {
+            logd(Log.WARN, TAG, "检查决策点 Hook 失败", t)
+            installHooks()
+        }
+    }
+
+    private fun activateIfNotDowngraded(app: Any?) {
+        val own = ownVersionCode()
+        var floor = -1L
+        try {
+            val appContext = app as? Context
+            if (appContext != null) {
+                HeyboxPrefs.init(appContext)
+                migrateLegacyPreferences()
+            }
+        } catch (ignored: Throwable) {
+        }
+        if (!BuildFlags.DEBUG) {
+            try {
+                if (HeyboxPrefs.getBoolean(App.KEY_DEBUG_NO_DOWNGRADE, false)) {
+                    HeyboxPrefs.setBoolean(App.KEY_DEBUG_NO_DOWNGRADE, false)
+                }
+            } catch (ignored: Throwable) {
+            }
+        }
+        if (BuildFlags.DEBUG && isEnabled(App.KEY_DEBUG_NO_DOWNGRADE, false)) {
+            try {
+                HeyboxPrefs.setString(App.KEY_MODULE_VERSION_FLOOR, "0")
+            } catch (ignored: Throwable) {
+            }
+            Checkpoint.mark("调试开关开启：已清除模块版本降级限制")
+            logd(Log.WARN, TAG, "调试开关开启：已清除模块版本降级限制，按常规激活")
+            installHooks()
+            return
+        }
+        var moduleUpdated = false
+        try {
+            val appContext = app as? Context
+            if (appContext != null) {
+                val stored = HeyboxPrefs.getString(App.KEY_MODULE_VERSION_FLOOR, null)
+                if (!stored.isNullOrBlank()) {
+                    floor = stored.trim().toLong()
+                }
+                if (own > 0) {
+                    val next = max(floor, own)
+                    HeyboxPrefs.setString(App.KEY_MODULE_VERSION_FLOOR, next.toString())
+                    if (next != floor) {
+                        moduleUpdated = true
+                        logd(Log.INFO, TAG, "版本下限: $next")
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            logd(Log.WARN, TAG, "检查读取失败，常规处理", t)
+            floor = -1
+        }
+        val downgraded = floor > 0 && own > 0 && own < floor && !BuildFlags.DEBUG
+        if (downgraded) {
+            GeneralHook.notifyDowngraded(app)
+            Checkpoint.mark("检测到模块过时: own=%d floor=%d，已停用", own, floor)
+            logd(Log.WARN, TAG, "检测到模块过时 own=$own < floor=$floor，拒绝激活")
+            return
+        }
+        installHooks()
+        if (moduleUpdated) {
+            GeneralHook.notifyModuleUpdated(app)
+            Checkpoint.mark("检测到模块更新: floor=%d -> %d，提示重启", floor, own)
+        }
+    }
+
+    private fun ownVersionCode(): Long {
+        try {
+            val info = getModuleApplicationInfo() ?: return -1L
+            val pkg = getPackageArchiveInfoCompat(info.sourceDir) ?: return -1L
+            return if (Build.VERSION.SDK_INT >= 28) pkg.getLongVersionCode() else pkg.versionCode.toLong()
+        } catch (t: Throwable) {
+            logd(Log.WARN, TAG, "读取模块自身版本失败", t)
+            return -1L
+        }
+    }
+
+    private fun getPackageArchiveInfoCompat(sourceDir: String): PackageInfo? {
+        val ctx = App.resolveAppContext() ?: return null
+        return ctx.packageManager.getPackageArchiveInfo(sourceDir, 0)
+    }
+
+    private fun installHooks() {
+        App.resolveAppContext()?.let { HeyboxPrefs.init(it) }
+        migrateLegacyPreferences()
+        var cl = targetClassLoader
+        if (cl == null) {
+            cl = param.hostClassLoader
+            targetClassLoader = cl
+        }
+        CrashGuard.install()
+
+        try {
+            SessionGuard.onProcessStart(App.resolveAppContext())
+        } catch (t: Throwable) {
+            logv(TAG, "会话结算失败: $t")
+        }
+        LiquidGlassHookBridge.setModule(this)
+        Checkpoint.mark(">>> 开始安装 Hook")
+        val t0 = SystemClock.elapsedRealtime()
+
+        HeyboxTargets.setHitProbe { method, onHit -> probe(method, onHit) }
+        HeyboxTargets.init(cl, App.resolveAppContext())
+        Checkpoint.mark("目标解析: %s", HeyboxTargets.report().replace('\n', ' '))
+        SearchContextTracker.install(this)
+
+        val postFilter = PostFilterHook(this)
+        registerHook("通用", GeneralHook(this)::install, cl)
+        registerHook("评论输入框贴合", CommentInputDockHook(this)::install, cl)
+        registerHook("广告过滤", AdFilterHook(this)::install, cl,
+            App.KEY_OPEN_SCREEN, App.KEY_FEED_AD, App.KEY_BUBBLE_AD, App.KEY_CORNER_AD)
+        registerHook("设置入口", SettingsEntryHook(this)::install, cl)
+        registerHook("扫一扫快捷方式", scanShortcutHook::install, cl)
+        registerHook("禁止底栏热更新", BottomTabUpdateHook(this)::install, cl, App.KEY_BLOCK_BOTTOM_TAB_UPDATE)
+        registerHook("底部导航", BottomTabHook(this)::install, cl,
+            App.KEY_HIDE_TAB_HOME, App.KEY_HIDE_TAB_HOT, App.KEY_HIDE_TAB_GAME, App.KEY_HIDE_ADD)
+        registerHook("液态玻璃底栏", LiquidGlassBottomBarHook(this)::install, cl,
+            App.KEY_LIQUID_GLASS, App.KEY_GLASS_IMMERSIVE)
+        registerHook("推广贴", PromotePostHook(this)::install, cl, App.KEY_PROMOTE_AD)
+        registerHook("首页广告横幅", FeedBannerHook(this)::install, cl, App.KEY_PROMOTE_AD)
+        registerHook("发帖过滤", postFilter::install, cl,
+            App.KEY_PROMOTE_AD, App.KEY_BLOCK_VIDEO_POST, App.KEY_POST_NO_LEVEL,
+            App.KEY_POST_AI_ENABLED, App.KEY_FLOW_DIAGNOSE,
+            App.KEY_POST_MIN_LEVEL, App.KEY_POST_KEYWORDS, App.KEY_POST_TAGS,
+            App.KEY_POST_MIN_LIKE, App.KEY_POST_MIN_COMMENT, App.KEY_POST_MIN_FAVOUR)
+        registerHook("失效收藏清理", FavourAutoCleanHook(this)::install, cl,
+            App.KEY_FAVOUR_AUTO_CLEAN)
+        registerHook("单列信息流", SingleColumnFeedHook(this)::install, cl,
+            App.KEY_SINGLE_COLUMN_FEED)
+        registerHook("首页信息流", FeedRefreshUndoHook(this)::install, cl,
+            App.KEY_FEED_REFRESH_UNDO, App.KEY_FEED_KEEP_PREVIOUS)
+        registerHook("搜索页精简", SearchPageCleanHook(this)::install, cl,
+            App.KEY_SEARCH_HIDE_BANNER, App.KEY_SEARCH_HIDE_DISCOVER, App.KEY_SEARCH_HIDE_HOT_RANK)
+        registerHook("游戏库精简", GameLibraryCleanHook(this)::install, cl,
+            App.KEY_GAME_LIB_HIDE_BANNER, App.KEY_GAME_LIB_HIDE_MENU, App.KEY_GAME_LIB_HIDE_SECTIONS)
+        registerHook("帖子详情精简", PostDetailCleanHook(this)::install, cl,
+            App.KEY_POST_DETAIL_CLEAN, App.KEY_POST_DETAIL_TOPIC_NO_CLICK, App.KEY_POST_DETAIL_TOPIC_HIDE,
+            App.KEY_POST_DETAIL_HIDE_IDS)
+        registerHook("伪装使用情况权限", FakeUsageAccessHook(this)::install, cl,
+            App.KEY_FAKE_USAGE_ACCESS, App.KEY_FAKE_USAGE_EMPTY_DATA)
+        registerHook("文本选择", TextSelectHook(this)::install, cl,
+            App.KEY_COPY_POST, App.KEY_CUSTOM_TEXT_SELECT)
+        registerHook("评论自由复制", CommentCopyHook(this)::install, cl,
+            App.KEY_COMMENT_FREE_COPY, App.KEY_CUSTOM_TEXT_SELECT,
+            App.KEY_SCREENSHOT_ENABLED, App.KEY_COMMENT_REPLY_PANEL)
+        registerHook("评论分享面板", CommentSharePanelHook(this)::install, cl)
+        registerHook("评论过滤", CommentFilterHook(this)::install, cl,
+            App.KEY_BLOCK_CY_COMMENT, App.KEY_HOST_HIDE_CY, App.KEY_BLOCK_GAME_RELAY,
+            App.KEY_CY_KEEP_FIRST, App.KEY_COMMENT_KEYWORDS)
+        registerHook("图片分享", ImageShareHook(this)::install, cl,
+            App.KEY_SYSTEM_SHARE, App.KEY_IMAGE_SHARE_NO_SAVE)
+        registerHook("图片缓存目录", ImageCacheDirHook(this)::install, cl,
+            App.KEY_IMAGE_CACHE_DIR)
+        registerHook("大图自动原图", ImageOriginalHook(this)::install, cl,
+            App.KEY_IMAGE_AUTO_ORIGINAL)
+        registerHook("自动展开回复", SubCommentExpandHook(this)::install, cl,
+            App.KEY_COMMENT_AUTO_EXPAND)
+
+        registerHook("消息红点", MessageRedDotHook(this)::install, cl,
+            App.KEY_HIDE_MSG_DOT, App.KEY_HIDE_MSG_BADGE)
+        registerHook("分享链接净化", ShareLinkPurifyHook(this)::install, cl,
+            App.KEY_PURIFY_SHARE_LINK)
+        registerHook("浏览器重定向", BrowserRedirectHook(this)::install, cl,
+            App.KEY_BROWSER_REDIRECT, App.KEY_BROWSER_REDIRECT_KNOWN, App.KEY_WEB_LOG)
+        registerHook("视频下载", VideoDownloadHook(this)::install, cl, App.KEY_VIDEO_DOWNLOAD)
+        registerHook("网页 DevTools", WebViewDevToolsHook(this)::install, cl,
+            App.KEY_WEBVIEW_DEVTOOLS)
+        registerHook("截图捕获", ScreenshotCaptureHook(this)::install, cl,
+            App.KEY_SCREENSHOT_ENABLED, App.KEY_SCREENSHOT_SHARE_NO_SAVE)
+        registerHook("目标提示", TargetHintHook(this)::install, cl)
+        registerHook("每日任务", HookInstaller { ignored ->
+            dailyTaskHook = DailyTaskHook(this).also { it.install(ignored) }
+        }, cl, App.KEY_DAILY_TASK_ENABLED)
+        registerHook("我的任务", HookInstaller { ignored ->
+            myTaskHook = MyTaskHook(this).also { it.install(ignored) }
+        }, cl, App.KEY_MY_TASK_ENABLED)
+        registerHook("动态推送", WatchHook(this)::install, cl,
+            App.KEY_WATCH_ENABLED, App.KEY_LOG)
+
+        Checkpoint.mark(">>> Hook 安装完成，总耗时 %d ms", SystemClock.elapsedRealtime() - t0)
+        logd(Log.INFO, TAG, "Hook 安装流程结束（因开关关闭延迟安装 ${pendingHookCount.get()} 个）")
+
+        CrashGuard.installLate()
+    }
+
+    fun interface HookInstaller {
+        fun install(cl: ClassLoader)
+    }
+
+    private class HookSpec(
+        val label: String,
+        val installer: HookInstaller,
+        val keys: Array<out String>
+    ) {
+        @Volatile
+        var installed: Boolean = false
+
+        fun matches(key: String): Boolean = keys.any { it == key }
+    }
+
+    private fun registerHook(
+        label: String,
+        installer: HookInstaller,
+        cl: ClassLoader?,
+        vararg keys: String
+    ) {
+        for (existing in hookSpecs) {
+            if (existing.label == label) {
+                return
+            }
+        }
+        val spec = HookSpec(label, installer, keys.copyOf())
+        hookSpecs.add(spec)
+        if (installIfEnabled(spec, cl)) {
+            return
+        }
+        if (!spec.installed) {
+            pendingHookCount.incrementAndGet()
+            logv(TAG, "跳过安装（开关关闭）: $label")
+        }
+    }
+
+    @Synchronized
+    private fun installIfEnabled(spec: HookSpec, cl: ClassLoader?): Boolean {
+        if (spec.installed || cl == null) {
+            return false
+        }
+        if (!isAnySwitchOn(spec.keys)) {
+            return false
+        }
+        spec.installed = true
+        if (!installHook(spec.label, spec.installer, cl)) {
+            spec.installed = false
+            return false
+        }
+        return true
+    }
+
+    private fun isAnySwitchOn(keys: Array<out String>): Boolean {
+        if (keys.isEmpty()) {
+            return true
+        }
+        for (key in keys) {
+            val def = App.BOOLEAN_DEFAULTS[key]
+            if (def != null) {
+                if (isEnabled(key, def)) {
+                    return true
+                }
+            } else if (isConfiguredString(key)) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun isConfiguredString(key: String): Boolean {
+        val trimmed = getString(key, "")?.trim() ?: return false
+        return trimmed.isNotEmpty() && trimmed != "0"
+    }
+
+    fun onSettingChanged(key: String?) {
+        if (key == null) {
+            return
+        }
+        invalidatePostFilterConfig()
+        if (key == App.KEY_SCAN_SHORTCUT) {
+            scanShortcutHook.refresh()
+        }
+        if (key.startsWith("post_detail_")) {
+            com.better.heybox.hooks.PostDetailCleanHook.refresh()
+        }
+        if (App.KEY_FAKE_USAGE_ACCESS == key || App.KEY_FAKE_USAGE_EMPTY_DATA == key) {
+            com.better.heybox.hooks.FakeUsageAccessHook.refresh()
+        }
+        if (pendingHookCount.get() == 0) {
+            return
+        }
+        val cl = targetClassLoader ?: return
+        for (spec in hookSpecs) {
+            if (spec.installed || !spec.matches(key)) {
+                continue
+            }
+            if (installIfEnabled(spec, cl)) {
+                pendingHookCount.decrementAndGet()
+            }
+        }
+    }
+
+    fun forceInstallHook(key: String?) {
+        val cl = targetClassLoader
+        if (cl == null || key == null) {
+            return
+        }
+        for (spec in hookSpecs) {
+            if (spec.installed || !spec.matches(key)) {
+                continue
+            }
+            var installedNow = false
+            synchronized(this) {
+                if (!spec.installed && installHook(spec.label, spec.installer, cl)) {
+                    spec.installed = true
+                    installedNow = true
+                }
+            }
+            if (installedNow) {
+                pendingHookCount.decrementAndGet()
+            }
+        }
+    }
+
+    private fun installHook(label: String, installer: HookInstaller, cl: ClassLoader): Boolean {
+        val t0 = SystemClock.elapsedRealtime()
+        return try {
+            installer.install(cl)
+            Checkpoint.mark("✔ %s Hook 安装完成 (%d ms)", label, SystemClock.elapsedRealtime() - t0)
+            true
+        } catch (t: Throwable) {
+            Checkpoint.mark("✘ %s Hook 安装失败: %s (%d ms)",
+                label, t, SystemClock.elapsedRealtime() - t0)
+            logd(Log.ERROR, TAG, "✘ $label Hook 安装失败", t)
+            false
+        }
+    }
+
+    fun invalidatePostFilterConfig() {
+        val hook = PostFilterHook.get()
+        hook?.invalidateConfig()
+    }
+
+    private fun migrateLegacyPreferences() {
+        val local = HeyboxPrefs.get() ?: return
+        try {
+            if (local.getBoolean(LEGACY_MIGRATION_COMPLETE, false)) return
+            val remote = legacyPreferences() ?: return
+            // Obtain the complete snapshot before staging any changes, so a failed read is retryable.
+            val snapshot = remote.all ?: return
+            val editor = local.edit()
+            for ((key, value) in snapshot) {
+                if (key !in LEGACY_SUPPORTED_KEYS || local.contains(key)) continue
+                val booleanKey = key in App.BOOLEAN_DEFAULTS ||
+                    key == App.KEY_DAILY_TASK_RESET || key == App.KEY_DAILY_TASK_SILENT
+                when {
+                    booleanKey && value is Boolean -> editor.putBoolean(key, value)
+                    !booleanKey && value is String -> editor.putString(key, value)
+                }
+            }
+            editor.putBoolean(LEGACY_MIGRATION_COMPLETE, true)
+            if (!editor.commit()) {
+                // SharedPreferences updates its in-memory map even when disk persistence fails.
+                local.edit().remove(LEGACY_MIGRATION_COMPLETE).apply()
+                log(Log.WARN, TAG, "旧配置迁移提交失败，将在下次启动重试")
+            }
+        } catch (t: Throwable) {
+            log(Log.WARN, TAG, "旧配置迁移失败，将在下次启动重试", t)
+        }
+    }
+
+    fun isEnabled(key: String, def: Boolean): Boolean = HeyboxPrefs.getBoolean(key, def)
+
+    fun getString(key: String, def: String?): String? = HeyboxPrefs.getString(key, def)
+
+    @Volatile private var logSwitchEnabled = false
+    @Volatile private var logSwitchVerbose = false
+    @Volatile private var logSwitchAt = 0L
+
+    fun logd(level: Int, tag: String, msg: String) {
+        val verbose = logSwitchVerbose()
+        if (!Logs.shouldLog(level) && !verbose) {
+            return
+        }
+        try {
+            val enabled = logSwitchEnabled()
+            LogRecorder.setEnabled(enabled)
+            LogRecorder.setVerbose(verbose)
+            if (enabled) {
+                LogRecorder.record(level, tag, msg)
+            }
+        } catch (ignored: Throwable) {
+        }
+        log(level, tag, msg)
+    }
+
+    fun logd(level: Int, tag: String, msg: String, tr: Throwable) {
+        val verbose = logSwitchVerbose()
+        if (!Logs.shouldLog(level) && !verbose) {
+            return
+        }
+        try {
+            val enabled = logSwitchEnabled()
+            LogRecorder.setEnabled(enabled)
+            LogRecorder.setVerbose(verbose)
+            if (enabled) {
+                LogRecorder.record(level, tag, msg, tr)
+            }
+        } catch (ignored: Throwable) {
+        }
+        log(level, tag, msg, tr)
+    }
+
+    fun logv(tag: String, msg: String) {
+        logd(Log.DEBUG, tag, msg)
+    }
+
+    fun invalidateLogSwitches() {
+        logSwitchAt = 0L
+    }
+
+    private fun logSwitchEnabled(): Boolean {
+        refreshLogSwitches()
+        return logSwitchEnabled
+    }
+
+    private fun logSwitchVerbose(): Boolean {
+        refreshLogSwitches()
+        return logSwitchVerbose
+    }
+
+    private fun refreshLogSwitches() {
+        val now = SystemClock.uptimeMillis()
+        if (now - logSwitchAt < LOG_SWITCH_TTL_MS) {
+            return
+        }
+        logSwitchEnabled = isEnabled(App.KEY_LOG, false)
+        logSwitchVerbose = isEnabled(App.KEY_VERBOSE_LOG, false)
+        logSwitchAt = now
+    }
+
+    fun dp(context: Context?, value: Float): Int = ThemeUtils.dp(context, value)
+
+    fun clearDailyTaskAndRetry(activity: Activity) {
+        forceInstallHook(App.KEY_DAILY_TASK_ENABLED)
+        dailyTaskHook?.clearTodayAndRetry(activity)
+    }
+
+    fun startMyTaskNow(activity: Activity) {
+        forceInstallHook(App.KEY_MY_TASK_ENABLED)
+        val hook = myTaskHook
+        if (hook == null) {
+            logd(Log.WARN, TAG, "我的任务 Hook 尚未安装（宿主 classloader 未就绪），请稍后再试")
+            return
+        }
+        hook.runNow(activity)
+    }
+
+    fun refreshMyTaskReport(activity: Activity) {
+        forceInstallHook(App.KEY_MY_TASK_ENABLED)
+        myTaskHook?.refreshReport(activity)
+    }
+
+    fun myTaskReport(): String =
+        myTaskHook?.report() ?: "我的任务 Hook 尚未安装"
+
+    fun clearMyTaskToday() {
+        forceInstallHook(App.KEY_MY_TASK_ENABLED)
+        myTaskHook?.clearToday()
+    }
+
+    companion object {
+        private const val LEGACY_MIGRATION_COMPLETE = "legacy_remote_migration_complete"
+        private val LEGACY_SUPPORTED_KEYS = setOf(
+            App.KEY_OPEN_SCREEN,
+            App.KEY_FEED_AD,
+            App.KEY_BUBBLE_AD,
+            App.KEY_CORNER_AD,
+            App.KEY_PROMOTE_AD,
+            App.KEY_HIDE_TAB_HOME,
+            App.KEY_HIDE_TAB_HOT,
+            App.KEY_HIDE_TAB_GAME,
+            App.KEY_HIDE_ADD,
+            App.KEY_COPY_POST,
+            App.KEY_CUSTOM_TEXT_SELECT,
+            App.KEY_COMMENT_FREE_COPY,
+            App.KEY_COMMENT_REPLY_PANEL,
+            App.KEY_SEARCH_HIDE_BANNER,
+            App.KEY_SEARCH_HIDE_DISCOVER,
+            App.KEY_SEARCH_HIDE_HOT_RANK,
+            App.KEY_GAME_LIB_HIDE_BANNER,
+            App.KEY_GAME_LIB_HIDE_MENU,
+            App.KEY_GAME_LIB_HIDE_SECTIONS,
+            App.KEY_GAME_LIB_HIDE_TYPES,
+            App.KEY_GAME_LIB_HIDE_ENTRIES,
+            App.KEY_GAME_LIB_HIDE_SECTION_NAMES,
+            App.KEY_BLOCK_UPDATE,
+            App.KEY_SYSTEM_SHARE,
+            App.KEY_DAILY_TASK_ENABLED,
+            App.KEY_DAILY_TASK_PICTURE,
+            App.KEY_DAILY_TASK_NORMAL,
+            App.KEY_DAILY_TASK_CHANNEL,
+            App.KEY_DAILY_TASK_DONE_DATE,
+            App.KEY_DAILY_TASK_RESET,
+            App.KEY_SHARE_CHANNEL,
+            App.KEY_DAILY_TASK_BACK_HOME,
+            App.KEY_DAILY_TASK_SILENT,
+            App.KEY_MY_TASK_ENABLED,
+            App.KEY_MY_TASK_AUTO_POST,
+            App.KEY_MY_TASK_AUTO_WARNED,
+            App.KEY_MY_TASK_TEXT,
+            App.KEY_MY_TASK_KEYWORDS,
+            App.KEY_MY_TASK_URGENT_ONLY,
+            App.KEY_MY_TASK_DELETE_AFTER,
+            App.KEY_MY_TASK_CLAIM,
+            App.KEY_MY_TASK_MAX_PER_DAY,
+            App.KEY_MY_TASK_DONE,
+            App.KEY_FAKE_NOTIFICATION,
+            App.KEY_VIDEO_DOWNLOAD,
+            App.KEY_VIDEO_DIR,
+            App.KEY_VIDEO_TO_MP4,
+            App.KEY_SCREENSHOT_ENABLED,
+            App.KEY_SCREENSHOT_HIDE_TAGS,
+            App.KEY_SCREENSHOT_HIDE_TIMESTAMPS,
+            App.KEY_SCREENSHOT_HIDE_ACTIONS,
+            App.KEY_SCREENSHOT_ADD_WATERMARK,
+            App.KEY_SCREENSHOT_HIDE_IRRELEVANT,
+            App.KEY_SCREENSHOT_HIDE_CLOSE,
+            App.KEY_SCREENSHOT_HIDE_FOLLOW,
+            App.KEY_SCREENSHOT_HIDE_LIKE_COUNT,
+            App.KEY_SCREENSHOT_HIDE_CUSTOM,
+            App.KEY_SCREENSHOT_HIDE_IMAGE_COUNT,
+            App.KEY_PURIFY_SHARE_LINK,
+            App.KEY_BROWSER_REDIRECT,
+            App.KEY_BROWSER_REDIRECT_KNOWN,
+            App.KEY_BROWSER_REDIRECT_FORCE,
+            App.KEY_BROWSER_REDIRECT_BLOCK,
+            App.KEY_BROWSER_TARGET,
+            App.KEY_WEB_LOG,
+            App.KEY_WEB_LOG_DATA,
+            App.KEY_LOG,
+            App.KEY_WEBVIEW_DEVTOOLS,
+            App.KEY_LIQUID_GLASS,
+            App.KEY_GLASS_IMMERSIVE,
+            App.KEY_GLASS_ADAPTIVE,
+            App.KEY_GLASS_DARK_COLOR,
+            App.KEY_GLASS_DARK_ALPHA,
+            App.KEY_GLASS_LIGHT_COLOR,
+            App.KEY_GLASS_LIGHT_ALPHA,
+            App.KEY_GLASS_BAR_HEIGHT,
+            App.KEY_GLASS_BAR_OFFSET,
+            App.KEY_GLASS_SIDE_MARGIN,
+            App.KEY_GLASS_FIT_TABS,
+            App.KEY_GLASS_BAR_WIDTH_MODE,
+            App.KEY_GLASS_BAR_WIDTH_PCT,
+            App.KEY_GLASS_TAB_WIDTH_PCT,
+            App.KEY_GLASS_BAR_LAYOUT,
+            App.KEY_GLASS_SEARCH_IN_BAR,
+            App.KEY_GLASS_PROVIDER,
+            App.KEY_SINGLE_COLUMN_FEED,
+            App.KEY_POST_MIN_LEVEL,
+            App.KEY_POST_MIN_LIKE,
+            App.KEY_POST_MIN_COMMENT,
+            App.KEY_POST_MIN_FAVOUR,
+            App.KEY_GLASS_TAB_SELECT_COLOR,
+            App.KEY_GLASS_TAB_SELECT_ALPHA,
+            App.KEY_GLASS_TAB_ORDER,
+            App.KEY_POST_FILTER_SKIP_SEARCH,
+            App.KEY_POST_FILTER_SKIP_FOLLOW,
+            App.KEY_IMAGE_AUTO_ORIGINAL,
+            App.KEY_IMAGE_CACHE_DIR,
+            App.KEY_COMMENT_AUTO_EXPAND,
+            App.KEY_SCREENSHOT_SHARE_NO_SAVE,
+            App.KEY_IMAGE_SHARE_NO_SAVE,
+            App.KEY_POST_NO_LEVEL,
+            App.KEY_POST_KEYWORDS,
+            App.KEY_POST_TAGS,
+            App.KEY_POST_AI_ENABLED,
+            App.KEY_BLOCK_VIDEO_POST,
+            App.KEY_HOST_HIDE_CY,
+            App.KEY_BLOCK_CY_COMMENT,
+            App.KEY_COMMENT_KEYWORDS,
+            App.KEY_BLOCK_GAME_RELAY,
+            App.KEY_RELAY_IGNORE_EMOJI,
+            App.KEY_CY_KEEP_FIRST,
+            App.KEY_FEED_REFRESH_UNDO,
+            App.KEY_FEED_KEEP_PREVIOUS,
+            App.KEY_FLOW_DIAGNOSE,
+            App.KEY_VERBOSE_LOG,
+            App.KEY_POST_DETAIL_CLEAN,
+            App.KEY_POST_DETAIL_TOPIC_NO_CLICK,
+            App.KEY_POST_DETAIL_TOPIC_HIDE,
+            App.KEY_POST_DETAIL_HIDE_IDS,
+            App.KEY_FAKE_USAGE_ACCESS,
+            App.KEY_FAKE_USAGE_EMPTY_DATA,
+            App.KEY_FAVOUR_AUTO_CLEAN,
+            App.KEY_HIDE_MSG_DOT,
+            App.KEY_HIDE_MSG_BADGE,
+            App.KEY_MSG_BADGE_ENTRIES,
+            App.KEY_MSG_FULL_HIDE_ENTRIES,
+            App.KEY_AI_PROVIDER,
+            App.KEY_AI_BASE_URL,
+            App.KEY_AI_MODEL,
+            App.KEY_AI_TOKEN,
+            App.KEY_AI_PROMPT,
+            App.KEY_AI_MAX_TOKENS,
+            App.KEY_GLASS_DARK_PRESET,
+            App.KEY_GLASS_LIGHT_PRESET,
+            App.KEY_WEBVIEW_ENTRY_URL,
+            App.KEY_DISCLAIMER_ACCEPTED,
+            App.KEY_MODULE_VERSION_FLOOR,
+            App.KEY_DEBUG_NO_DOWNGRADE,
+            App.KEY_TARGET_HINT_VISIBLE,
+            App.KEY_WATCH_ENABLED,
+            App.KEY_WATCH_USERS,
+            App.KEY_WATCH_KEYWORDS,
+            App.KEY_WATCH_BANNER,
+            App.KEY_WATCH_NOTIFY,
+            App.KEY_WATCH_INTERVAL_MIN,
+            App.KEY_WATCH_WINDOW_DAYS,
+            App.KEY_WATCH_WINDOW_MIN,
+            App.KEY_WATCH_TOPICS,
+            App.KEY_WATCH_RECENT_TOPICS,
+            App.KEY_WATCH_TITLE_ONLY,
+            App.KEY_WATCH_STREAM_FETCH,
+            App.KEY_WATCH_PUSH_ENABLED,
+            App.KEY_WATCH_PUSH_DINGTALK,
+            App.KEY_WATCH_PUSH_WXPUSHER,
+            App.KEY_WATCH_PUSH_ONEBOT,
+            App.KEY_WATCH_PUSH_CUSTOM,
+            App.KEY_WATCH_SEEN,
+            App.KEY_WATCH_LAST_CHECK,
+            App.KEY_WATCH_BASELINED,
+            "comment_panel_actions"
+        )
+        private const val LOG_SWITCH_TTL_MS = 1_000L
+
+        @JvmField
+        val TAG = "BetterHeybox"
+
+        const val TARGET_PKG = "com.max.xiaoheihe"
+
+        @JvmField
+        val SUPPORTED_HEYBOX_VERSIONS: Set<String> =
+            java.util.Collections.unmodifiableSet(
+                java.util.LinkedHashSet(
+                    java.util.Arrays.asList(
+                        "1.3.396",
+                        "1.3.397",
+                        "1.3.398",
+                        "1.3.399",
+                        "1.3.400"
+                    )
+                )
+            )
+
+        @Volatile
+        private var sInstance: MainModule? = null
+
+        @JvmStatic
+        fun attach(param: PackageParam) {
+            val module = MainModule(param)
+            sInstance = module
+            module.log(Log.INFO, TAG, ">>> 命中小黑盒，安装 Hook")
+            module.deferInstallForDowngradeCheck()
+        }
+
+        @JvmStatic
+        fun get(): MainModule? = sInstance
+
+        @JvmStatic
+        fun releaseCurrent() {
+            val instance = sInstance ?: return
+            sInstance = null
+            try {
+                instance.release()
+            } catch (ignored: Throwable) {
+            }
+        }
+
+        @JvmStatic
+        fun getHeyboxTabLabel(context: Context?, resName: String?, def: String?): String? {
+            try {
+                var res: Resources? = null
+                var id = 0
+                try {
+                    res = context?.resources
+                    id = res?.getIdentifier(resName, "string", TARGET_PKG) ?: 0
+                } catch (ignored: Throwable) {
+                }
+                if (id == 0) {
+                    try {
+                        res = context?.packageManager?.getResourcesForApplication(TARGET_PKG)
+                        id = res?.getIdentifier(resName, "string", TARGET_PKG) ?: 0
+                    } catch (ignored: Throwable) {
+                    }
+                }
+                if (id != 0 && res != null) {
+                    return res.getString(id)
+                }
+            } catch (ignored: Throwable) {
+            }
+            return def
+        }
+    }
+}

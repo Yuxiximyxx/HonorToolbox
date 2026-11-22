@@ -146,6 +146,15 @@
             android:authorities="io.github.yuxiximyxx.honortoolbox.quickgesture"
             android:exported="true" />
 
+        <!-- 小黑盒增强的配置 Provider（v1.7.0）：hook 进程
+             （小黑盒）经 call("getAll") 拉镜像配置、经
+             call("put") 回写软件内面板的改动，authority 与
+             资源库/快服务两个错开。 -->
+        <provider
+            android:name=".betterheybox.BetterHeyboxConfigProvider"
+            android:authorities="io.github.yuxiximyxx.honortoolbox.betterheybox"
+            android:exported="true" />
+
         <!-- Xposed Module 声明（传统 API） -->
         <meta-data
             android:name="xposedmodule"

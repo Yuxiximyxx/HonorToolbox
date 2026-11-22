@@ -20,6 +20,9 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven("https://api.xposed.info/")
+        // 小黑盒增强（BetterHeybox 合入，v1.7.0）：其液态玻璃
+        // 底栏依赖的 com.example.liquidglass 仅在 JitPack 分发
+        maven("https://jitpack.io")
         maven("https://s01.oss.sonatype.org/content/repositories/releases/")
     }
 }

@@ -112,6 +112,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import io.github.yuxiximyxx.honortoolbox.libraryplus.HonorSearchScreen
 import io.github.yuxiximyxx.honortoolbox.libraryplus.LibraryPlusScreen
+import io.github.yuxiximyxx.honortoolbox.betterheybox.BetterHeyboxScreen
 import io.github.yuxiximyxx.honortoolbox.palmpurify.PalmPurifyScreen
 import io.github.yuxiximyxx.honortoolbox.magicpods.EarphoneDetailActivity
 import io.github.yuxiximyxx.honortoolbox.magicxm4.EarphoneDetailActivity as Xm4EarphoneDetailActivity
@@ -343,8 +344,8 @@ private enum class ToolboxTab { Home, System, Apps, Settings }
 /** 「系统」页内部页：分组总览 / 四个功能的完整设置子页。 */
 private enum class SystemPage { Root, QuickGesture, NavWake, Shade, NightIcon, LibraryPlus, HonorSearch }
 
-/** 「应用」页内部页：总览 / 掌盟净化设置子页（v1.6.0）。 */
-private enum class AppsPage { Root, PalmPurify }
+/** 「应用」页内部页：总览 / 掌盟净化（v1.6.0）/ 小黑盒增强（v1.7.0）设置子页。 */
+private enum class AppsPage { Root, PalmPurify, Heybox }
 
 /** 首页内部页：总览 / 按功能分组的重启作用域页（v1.6.2）。 */
 private enum class HomePage { Root, ScopeRestart }
@@ -585,8 +586,13 @@ private fun ToolboxHost(
                 AppsPage.Root -> AppsScreen(
                     bottomInset = bottomInset,
                     onOpenPalmPurify = { appsPage = AppsPage.PalmPurify },
+                    onOpenHeybox = { appsPage = AppsPage.Heybox },
                 )
                 AppsPage.PalmPurify -> PalmPurifyScreen(
+                    onBack = { appsPage = AppsPage.Root },
+                    bottomInset = bottomInset,
+                )
+                AppsPage.Heybox -> BetterHeyboxScreen(
                     onBack = { appsPage = AppsPage.Root },
                     bottomInset = bottomInset,
                 )
@@ -1549,7 +1555,8 @@ private data class ScopeGroup(val title: String, val hosts: List<ScopeHost>)
  * - 耳机：Free4/XM4 的五个宿主（systemui 内的状态栏图标/
  *   控制中心卡 + 蓝牙/耳机服务/SWS/控制中心四进程，与
  *   ToolboxHook 分发一致）；
- * - 掌盟净化：com.tencent.qt.qtl。
+ * - 应用增强：掌盟净化的 com.tencent.qt.qtl + 小黑盒增强的
+ *   com.max.xiaoheihe（v1.7.0 起同组并列）。
  */
 private val SCOPE_GROUPS: List<ScopeGroup> = listOf(
     ScopeGroup(
@@ -1588,9 +1595,10 @@ private val SCOPE_GROUPS: List<ScopeGroup> = listOf(
         ),
     ),
     ScopeGroup(
-        "掌盟净化",
+        "应用增强",
         listOf(
             ScopeHost("com.tencent.qt.qtl", "掌盟净化"),
+            ScopeHost("com.max.xiaoheihe", "小黑盒增强"),
         ),
     ),
 )
@@ -1996,12 +2004,13 @@ private fun SystemScreen(
 /**
  * 应用页（v1.6.0 起有真内容）：给第三方应用做的增强放这里，
  * 按组排列、以后同类模块继续往下加组。第一组「应用增强」
- * 收掌盟净化入口（原独立模块 PalmPurify 的设置）。
+ * 收掌盟净化（v1.6.0）与小黑盒增强（v1.7.0）的入口。
  */
 @Composable
 private fun AppsScreen(
     bottomInset: Dp,
     onOpenPalmPurify: () -> Unit,
+    onOpenHeybox: () -> Unit,
 ) {
     Scaffold(
         containerColor = MiuixTheme.colorScheme.surface,
@@ -2029,6 +2038,11 @@ private fun AppsScreen(
                         title = "掌盟净化",
                         summary = "给掌上英雄联盟去广告、精简界面与导航条沉浸",
                         onClick = onOpenPalmPurify,
+                    )
+                    SuperArrow(
+                        title = "小黑盒增强",
+                        summary = "给小黑盒去广告、内容过滤、液态玻璃底栏与动态推送",
+                        onClick = onOpenHeybox,
                     )
                 }
                 Card(

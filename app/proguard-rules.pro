@@ -22,3 +22,13 @@
 # PalmPurify（v1.6.0 合入）：hook 类在宿主进程被装载并反射
 # 访问宿主与自身成员，整包保留防改名/裁剪
 -keep class io.github.yuxiximyxx.honortoolbox.palmpurify.** { *; }
+
+# BetterHeybox（v1.7.0 合入）：移植树（com.better.heybox）整包
+# 保留——hook 类在宿主进程被装载、大量反射访问宿主与自身成员，
+# 且有类名字符串自检（如 com.better.heybox 前缀判定）；Yuki 适配
+# 层（com.highcapable.yukihookapi）是本仓自写 shim，一并保留；
+# 外部玻璃库 com.example.liquidglass 同样整包保留防裁剪
+-keep class com.better.heybox.** { *; }
+-keep class com.highcapable.yukihookapi.** { *; }
+-keep class com.example.liquidglass.** { *; }
+-dontwarn com.example.liquidglass.**
