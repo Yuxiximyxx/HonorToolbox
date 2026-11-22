@@ -364,7 +364,7 @@ object SettingsHeadsetHook : HookContext() {
             val vp = Class.forName("android.view.View")
                 .getDeclaredMethod("performClick").apply { isAccessible = true }
             module.hook(vp).intercept { chain ->
-                val v = chain.thisObject
+                val v: Any = chain.thisObject ?: return@intercept chain.proceed()
                 val id = runCatching { v.javaClass.getMethod("getId").invoke(v) as? Int }.getOrNull()
                 var name: String? = null
                 if (id != null && id != 0) {
@@ -398,7 +398,7 @@ object SettingsHeadsetHook : HookContext() {
                     Class.forName("android.view.View\$OnClickListener"))
                 .apply { isAccessible = true }
             module.hook(m).intercept { chain ->
-                val v = chain.thisObject
+                val v: Any = chain.thisObject ?: return@intercept chain.proceed()
                 val id = runCatching { v.javaClass.getMethod("getId").invoke(v) as? Int }.getOrNull()
                 var name: String? = null
                 if (id != null && id != 0) {

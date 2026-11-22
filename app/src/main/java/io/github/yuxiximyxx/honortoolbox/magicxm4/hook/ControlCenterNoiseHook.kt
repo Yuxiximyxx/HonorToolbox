@@ -1648,7 +1648,7 @@ object ControlCenterNoiseHook : HookContext() {
     private const val DUMP_KEY = "magicxm4_debug_dump"
 
     private fun isVerboseDump(): Boolean =
-        io.github.yuxiximyxx.honortoolbox.magicxm4.BuildConfig.DEBUG || runCatching {
+        io.github.yuxiximyxx.honortoolbox.BuildConfig.DEBUG || runCatching {
             currentApp()?.let {
                 android.provider.Settings.Global.getString(it.contentResolver, DUMP_KEY) == "1"
             } == true

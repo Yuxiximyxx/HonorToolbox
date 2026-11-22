@@ -1,6 +1,7 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 package io.github.yuxiximyxx.honortoolbox.magicxm4
 
+import io.github.yuxiximyxx.honortoolbox.R
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings

@@ -9,7 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import kotlinx.serialization.json.Json
-import io.github.yuxiximyxx.honortoolbox.magicxm4.BuildConfig
+import io.github.yuxiximyxx.honortoolbox.BuildConfig
 import io.github.yuxiximyxx.honortoolbox.magicxm4.utils.SystemApisUtils
 import io.github.yuxiximyxx.honortoolbox.magicxm4.utils.huaweiStrongToast.data.BatteryParams
 import io.github.yuxiximyxx.honortoolbox.magicxm4.utils.huaweiStrongToast.data.HuaweiStrongToastBean

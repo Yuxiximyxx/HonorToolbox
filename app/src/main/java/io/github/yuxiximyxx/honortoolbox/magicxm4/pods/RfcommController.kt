@@ -7,7 +7,7 @@ import android.app.NotificationManager
 import android.bluetooth.*
 import android.content.*
 import android.content.SharedPreferences
-import io.github.yuxiximyxx.honortoolbox.magicxm4.BuildConfig
+import io.github.yuxiximyxx.honortoolbox.BuildConfig
 import io.github.yuxiximyxx.honortoolbox.magicxm4.hook.Log
 import io.github.yuxiximyxx.honortoolbox.magicxm4.utils.MediaControl
 import io.github.yuxiximyxx.honortoolbox.magicxm4.utils.MagicXm4Action

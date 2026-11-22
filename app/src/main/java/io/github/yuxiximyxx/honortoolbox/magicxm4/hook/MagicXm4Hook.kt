@@ -2,7 +2,6 @@ package io.github.yuxiximyxx.honortoolbox.magicxm4.hook
 
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 import io.github.yuxiximyxx.honortoolbox.magicxm4.config.ConfigManager
-import io.github.yuxiximyxx.honortoolbox.magicxm4.utils.DeviceIdentity
 
 /**
  * MagicXm4Hook — MagicXM4 合入工具箱后的统一分发（传统 Xposed API）。
@@ -51,8 +50,8 @@ object MagicXm4Hook {
             "com.hihonor.audioaccessorymanager" -> listOf(HonorEarphoneHook)
             else -> return
         }
-        // 子线程写 Settings 不能靠 ActivityThread.currentApplication()（ThreadLocal）
-        runCatching { DeviceIdentity.warm() }
+        // 注：XM4 的 DeviceIdentity 无 warm()（currentApp() 每次反射取
+        // Application、无缓存可预热），与 MagicPodsHook 的同名步骤差异在此。
         for (hook in hooks) {
             try {
                 hook.appClassLoader = lpparam.classLoader
