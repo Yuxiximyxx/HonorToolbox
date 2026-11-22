@@ -1482,7 +1482,12 @@ private fun RestartRow(
 // ── 重启作用域页（v1.6.2，小乐按药师·荣耀高级设置的同名页点名） ──
 
 /** 一个宿主条目：包名 + 它在本组里被哪个功能引用（行内小字）。 */
-private data class ScopeHost(val pkg: String, val refNote: String)
+private data class ScopeHost(
+    val pkg: String,
+    val refNote: String,
+    /** 仅探针模式才装 hook 的宿主：页面直接不显示（v1.6.3）。 */
+    val probeOnly: Boolean = false,
+)
 
 /** 一个功能分组（与 ToolboxHook 的宿主分发逐项核对，见下）。 */
 private data class ScopeGroup(val title: String, val hosts: List<ScopeHost>)
@@ -1496,7 +1501,7 @@ private data class ScopeGroup(val title: String, val hosts: List<ScopeHost>)
  *   （ShadeClockHook 的两个分发分支）；
  * - 手势与唤醒：快服务改向的 servicecenter + 长按唤醒的
  *   systemui 两个包名候选与 magicvoice/brain（后两者只在
- *   探针模式下装 hook，行内标明）；
+ *   探针模式下装 hook、probeOnly 标记，页面不显示）；
  * - 桌面：launcher（日夜图标 + 资源库增强 + 通知中心主题
  *   探针共用）+ 资源库的 hiboard/search；
  * - 耳机：Free4/XM4 的五个宿主（systemui 内的状态栏图标/
@@ -1518,8 +1523,8 @@ private val SCOPE_GROUPS: List<ScopeGroup> = listOf(
             ScopeHost("com.hihonor.servicecenter", "快服务手势改向"),
             ScopeHost("com.android.systemui", "长按导航条唤醒"),
             ScopeHost("com.hihonor.systemui", "长按导航条唤醒"),
-            ScopeHost("com.hihonor.magicvoice", "长按导航条唤醒 · 仅探针模式"),
-            ScopeHost("com.hihonor.brain", "长按导航条唤醒 · 仅探针模式"),
+            ScopeHost("com.hihonor.magicvoice", "长按导航条唤醒 · 仅探针模式", probeOnly = true),
+            ScopeHost("com.hihonor.brain", "长按导航条唤醒 · 仅探针模式", probeOnly = true),
         ),
     ),
     ScopeGroup(
@@ -1548,7 +1553,7 @@ private val SCOPE_GROUPS: List<ScopeGroup> = listOf(
     ),
 )
 
-/** 宿主在本机的应用名；没装返回 null（页面据此标未安装、禁勾选）。 */
+/** 宿主在本机的应用名；没装返回 null（页面据此直接不显示该行，v1.6.3）。 */
 private fun scopeHostLabel(context: Context, pkg: String): String? = runCatching {
     val pm = context.packageManager
     pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
@@ -1575,7 +1580,9 @@ private fun restartScopeHost(context: Context, pkg: String): Boolean = when (pkg
  * 「全部作用域」页：按功能分组列全部 hook 宿主（应用名 +
  * 包名 + 引用注记），逐行勾选、每组可整组勾/清，页尾
  * 全选/取消全选 + 「重启选中」统一执行，执行后逐行回显
- * 结果并给汇总。入口只在首页重启卡（全应用唯一重启入口
+ * 结果并给汇总。未安装的宿主行与仅探针模式的宿主行直接
+ * 不显示、分组计数也不含它们，整组无行则整组不显示
+ * （v1.6.3）。入口只在首页重启卡（全应用唯一重启入口
  * 的定版不变）；页尾操作区随列表同滚、不做固定底栏——
  * 固定底区刚在选应用页被点名难看，这里不重蹈。
  */
@@ -1589,14 +1596,21 @@ private fun ScopeRestartScreen(onBack: () -> Unit, bottomInset: Dp = 0.dp) {
         SCOPE_GROUPS.flatMap { it.hosts }.map { it.pkg }.distinct()
             .associateWith { scopeHostLabel(context, it) }
     }
+    // 实际展示的分组：滤掉未安装与仅探针模式的宿主行，
+    // 整组无行则整组不显示；勾选键的组序以此清单为准。
+    val visibleGroups = remember(labels) {
+        SCOPE_GROUPS.mapNotNull { group ->
+            val hosts = group.hosts.filter { !it.probeOnly && labels[it.pkg] != null }
+            if (hosts.isEmpty()) null else ScopeGroup(group.title, hosts)
+        }
+    }
     var checked by remember { mutableStateOf<Set<String>>(emptySet()) }
     var running by remember { mutableStateOf(false) }
     var results by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
 
     fun key(groupIndex: Int, pkg: String) = "$groupIndex:$pkg"
     fun groupKeys(groupIndex: Int): List<String> =
-        SCOPE_GROUPS[groupIndex].hosts
-            .filter { labels[it.pkg] != null }
+        visibleGroups[groupIndex].hosts
             .map { key(groupIndex, it.pkg) }
     val selectedPkgs = checked.map { it.substringAfter(':') }.distinct()
 
@@ -1631,7 +1645,7 @@ private fun ScopeRestartScreen(onBack: () -> Unit, bottomInset: Dp = 0.dp) {
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }
-            SCOPE_GROUPS.forEachIndexed { groupIndex, group ->
+            visibleGroups.forEachIndexed { groupIndex, group ->
                 item(key = "group-$groupIndex") {
                     Column {
                         SmallTitle(
@@ -1671,47 +1685,41 @@ private fun ScopeRestartScreen(onBack: () -> Unit, bottomInset: Dp = 0.dp) {
                                     HorizontalDivider(
                                         modifier = Modifier.padding(horizontal = 16.dp)
                                     )
-                                    val label = labels[host.pkg]
-                                    val installed = label != null
+                                    // 能进 visibleGroups 的行必然已安装，label 必有值。
+                                    val label = labels[host.pkg] ?: host.pkg
                                     val k = key(groupIndex, host.pkg)
                                     val result = results[host.pkg]
                                     BasicComponent(
-                                        title = label ?: host.pkg,
+                                        title = label,
                                         summary = buildString {
-                                            if (installed && label != host.pkg) {
+                                            if (label != host.pkg) {
                                                 append(host.pkg).append(" · ")
                                             }
                                             append(host.refNote)
-                                            if (!installed) append(" · 未安装")
                                             if (result != null) {
                                                 append(if (result) " · 已重启" else " · 重启失败")
                                             }
                                         },
-                                        enabled = installed,
                                         endActions = {
                                             Checkbox(
                                                 checked = k in checked,
                                                 onCheckedChange = { v ->
-                                                    if (installed) {
-                                                        checked = if (v) {
-                                                            checked + k
-                                                        } else {
-                                                            checked - k
-                                                        }
-                                                        results = emptyMap()
+                                                    checked = if (v) {
+                                                        checked + k
+                                                    } else {
+                                                        checked - k
                                                     }
+                                                    results = emptyMap()
                                                 },
                                             )
                                         },
                                         onClick = {
-                                            if (installed) {
-                                                checked = if (k in checked) {
-                                                    checked - k
-                                                } else {
-                                                    checked + k
-                                                }
-                                                results = emptyMap()
+                                            checked = if (k in checked) {
+                                                checked - k
+                                            } else {
+                                                checked + k
                                             }
+                                            results = emptyMap()
                                         },
                                     )
                                 }
@@ -1727,7 +1735,7 @@ private fun ScopeRestartScreen(onBack: () -> Unit, bottomInset: Dp = 0.dp) {
                         TextButton(
                             text = "全选",
                             onClick = {
-                                checked = SCOPE_GROUPS.indices
+                                checked = visibleGroups.indices
                                     .flatMap { groupKeys(it) }.toSet()
                                 results = emptyMap()
                             },

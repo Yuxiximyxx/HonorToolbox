@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.6.2-release.apk
+          cp "$SRC" dist/HonorToolbox-1.6.3-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.6.2-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.6.3-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,76 +66,25 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.6.2
-          name: 荣耀工具箱 1.6.2
+          tag_name: v1.6.3
+          name: 荣耀工具箱 1.6.3
           body: |
-            ## 荣耀工具箱 1.6.2（保存按钮移顶栏 + 三链审计与诊断 + 重启作用域页）
+            ## 荣耀工具箱 1.6.3（全部作用域页隐藏无效行）
 
-            **一、选应用页改版（小乐点名）**
-            - 长按唤醒「选择可唤起的应用」页：保存从左下角
-              固定区移到顶栏右上角，底部固定区整个取消、列表
-              占满整页，不再留一整条黑边。
-            - 同款式全量巡检：全应用只有这一页是「底部固定
-              保存/确认区」式样；其余候选（耳机详情页与资源
-              库的保存/确定都在弹窗里、日夜图标的「应用」是
-              滚动区内按钮、快服务手动输入的保存是列表内卡片
-              按钮）都不是这个式样，无需改。
+            只有一处小改（小乐点名）：首页「全部作用域」页里，
+            - 未安装的宿主行（如 com.hihonor.systemui）
+            - 标注「仅探针模式」的宿主行（如
+              com.hihonor.magicvoice、com.hihonor.brain）
+            直接不显示；分组与「全选本组」的计数也随之不含
+            这些行，整组无行时整组不显示。
 
-            **二、三处 hook 不生效：端到端静态审计结论**
-            对长按唤醒 / 快服务改向 / 掌盟（开屏+底栏精简）
-            三条链逐段核了「设置写出 → 落盘文件与键名 →
-            hook 读取路径与键名 → 启用条件 → hook 点」：
-            - 没查出代码可证的不一致：三条链两侧的路径、键名、
-              默认值都对得上；快服务 hook 点
-              LauncherActivity.onCreate/onNewIntent 与手势
-              from_tag="LauncherScroll" 判定，与现行快服务
-              11.0.8.301 反编译原文逐行对得上；掌盟的配置
-              通道由底栏名单能记录三项反证可读写、DexKit 的
-              .so 也在包里。剩下的嫌疑都在运行时（作用域是否
-              勾上、宿主进程是否重启过、当前固件的调用路径
-              是否漂移），静态查不实——所以本版给三条链补齐
-              可取证的诊断日志（见下），下轮复现后凭日志定案。
-            - 顺带修掉一个静默失败口：长按唤醒的配置落盘
-              原先失败了也不提示（返回值被丢弃），现在设置
-              页会明示「配置同步落盘失败，请再操作一次」。
+            已安装且正常功能的宿主行、分组结构、勾选与重启
+            逻辑一律未动；其余功能、hook、配置均未改动。
 
-            **三、诊断日志落盘（Download/HonorToolbox/ 下）**
-            - navwake.log：长按唤醒的 hook 安装、每次拦截的
-              判定结果与放行/拦截原因（带时间戳，同行节流）。
-            - quickgesture.log：快服务改向的安装与每次手势
-              判定；安装时多记一行 hook 侧实际读到的配置
-              （enabled/mode/包名/activity 原样）。旧路径
-              Download/quickgesture_probe.log 继续双写。
-            - palmpurify.log：掌盟四组 hook 的安装与判定
-              （开屏短路/放行原因、底栏套用、弹窗拦截等）。
-            - activation_status 改每宿主一份
-              （activation_status_<宿主包名>.txt，旧单文件
-              继续写）：哪个宿主的 hook 活着逐个可查。
-
-            **四、「重启作用域」按功能分组（小乐按药师同名页点名）**
-            - 首页重启卡原四行快捷重启保留，新增一行
-              「全部作用域」进新页（入口仍只在首页）。
-            - 新页按功能分组列全部 hook 宿主（应用名+包名+
-              被哪个功能引用）：通知中心主题 2、手势与唤醒
-              5、桌面 3、耳机 5、掌盟净化 1；与清单
-              xposedscope 全量 14 项对照——去掉工具箱自身
-              （只是激活自检、不是 hook 宿主）后 13 个宿主
-              一个不漏，同一宿主被多功能共用时在各组都列。
-            - 逐行勾选、每组可整组勾/清、页尾全选/取消全选
-              +「重启选中」统一执行；执行走与四行快捷重启
-              同一套通道（系统界面令牌、桌面令牌兜底、其余
-              root 强停），同一宿主只重启一次，执行后逐行
-              回显成功/失败并给汇总。
-
-            **复验步骤（装后先做）**：在 LSPosed 里确认工具箱
-            作用域勾齐（系统界面、荣耀快服务、掌上英雄联盟
-            等都要在），然后强停/重启对应宿主再试（可用首页
-            新的「全部作用域」页勾选后一键重启）。重点看：
-            ① 选应用页保存已在右上角、页脚无黑条；② 长按
-            导航条应打开所选应用、底角斜滑应打开荣耀搜索；
-            ③ 掌盟冷启无开屏广告、底栏精简生效。若仍不
-            生效，把 Download/HonorToolbox/ 下的 navwake.log、
-            quickgesture.log、palmpurify.log 三份日志发回，
-            凭日志定案。
+            **复验点**：打开首页 →「全部作用域」，手势与唤醒组
+            应只剩荣耀快服务、系统用户界面两行（不再出现
+            com.hihonor.systemui 未安装行与 YOYO 智能体、
+            智慧决策两行），其余分组行数不变、勾选与「重启
+            选中」照常可用。
 
           files: dist/*.apk
