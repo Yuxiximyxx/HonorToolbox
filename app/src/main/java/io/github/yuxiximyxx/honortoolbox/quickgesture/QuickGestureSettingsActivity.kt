@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -77,6 +79,15 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * 是「系统」页内的子页（[QuickGestureScreen]），主题与
  * 状态栏图标明暗由宿主统一提供；本页原本没有 onCreate 级
  * 配置绑定（组合时读偏好 + 首组合落盘自愈），维持原样。
+ *
+ * v1.6.1：「选择启动方式」页加手动输入（包名 + 活动全名，
+ * 保存走同一条 persist 通道；保存前软校验——应用不存在或
+ * 类名不在已声明活动里只提示、允许强制保存，类名为空不许
+ * 保存）与 activity 搜索框。活动列表一直按 GET_ACTIVITIES
+ * 全量枚举，但上百个活动无搜索时翻不到：如荣耀搜索首页
+ * HomeActivity 只挂 ACTION_VIEW 深链入口、无 LAUNCHER
+ * 入口，小乐真机反馈列表里找不到——手动输入就是给这类
+ * 活动留的直达口。
  */
 
 private const val PREFS_NAME = "quickgesture_settings"
@@ -270,6 +281,16 @@ internal fun QuickGestureScreen(onExit: () -> Unit, bottomInset: Dp = 0.dp) {
                             mode = GestureConfig.MODE_ACTIVITY,
                             pkg = p,
                             activity = entry.name,
+                        )
+                    )
+                    page = PAGE_HOME
+                },
+                onSaveManual = { p, a ->
+                    persist(
+                        config.copy(
+                            mode = GestureConfig.MODE_ACTIVITY,
+                            pkg = p,
+                            activity = a,
                         )
                     )
                     page = PAGE_HOME
@@ -506,8 +527,10 @@ private fun ActivityListPage(
     current: GestureConfig,
     onPickAppMode: () -> Unit,
     onPickActivity: (ActivityEntry) -> Unit,
+    onSaveManual: (pkg: String, activity: String) -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val launchComponent = remember(pkg) {
         try {
             context.packageManager.getLaunchIntentForPackage(pkg)?.component
@@ -515,7 +538,68 @@ private fun ActivityListPage(
             null
         }
     }
+
+    var query by remember(pkg) { mutableStateOf("") }
+
+    // 手动输入（v1.6.1）：包名预填当前所选应用、类名预填当前
+    // 目标（同包同模式时）；校验只提示不硬拦，警告未消时按钮
+    // 变「仍要保存」，再点一次强制落盘。输入一变就清警告。
+    var manualPkg by remember(pkg) { mutableStateOf(pkg) }
+    var manualActivity by remember(pkg) {
+        mutableStateOf(
+            if (current.pkg == pkg &&
+                current.mode == GestureConfig.MODE_ACTIVITY
+            ) {
+                current.activity
+            } else {
+                ""
+            }
+        )
+    }
+    var manualError by remember(pkg) { mutableStateOf<String?>(null) }
+    var manualWarning by remember(pkg) { mutableStateOf<String?>(null) }
+
+    fun attemptSave(force: Boolean) {
+        val p = manualPkg.trim()
+        val raw = manualActivity.trim()
+        if (p.isEmpty()) {
+            manualError = "包名不能为空"
+            return
+        }
+        if (raw.isEmpty()) {
+            manualError = "活动类名不能为空"
+            return
+        }
+        manualError = null
+        val a = expandActivityName(p, raw)
+        scope.launch {
+            val warn = withContext(Dispatchers.IO) {
+                validateManualTarget(context, p, a)
+            }
+            if (warn != null && !force) {
+                manualWarning = warn
+            } else {
+                manualWarning = null
+                onSaveManual(p, a)
+            }
+        }
+    }
+
+    val filtered = activities?.filter {
+        query.isEmpty() || it.name.contains(query, ignoreCase = true)
+    }
+
     Column(modifier = modifier) {
+        TextField(
+            value = query,
+            onValueChange = { query = it },
+            label = "搜索 activity",
+            useLabelAsPlaceholder = true,
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        )
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = bottomInset),
@@ -545,13 +629,96 @@ private fun ActivityListPage(
                     }
                 }
             }
+            item(key = "manual") {
+                Column {
+                    SmallTitle(
+                        text = "手动输入",
+                        insideMargin = PaddingValues(start = 20.dp, top = 8.dp),
+                    )
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(
+                                horizontal = 16.dp, vertical = 12.dp,
+                            ),
+                        ) {
+                            TextField(
+                                value = manualPkg,
+                                onValueChange = {
+                                    manualPkg = it
+                                    manualWarning = null
+                                },
+                                label = "包名",
+                                useLabelAsPlaceholder = true,
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            TextField(
+                                value = manualActivity,
+                                onValueChange = {
+                                    manualActivity = it
+                                    manualWarning = null
+                                },
+                                label = "活动类名（全名）",
+                                useLabelAsPlaceholder = true,
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            if (manualError != null) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    manualError!!,
+                                    fontSize = 13.sp,
+                                    color = Color(0xFFE5484D),
+                                )
+                            }
+                            if (manualWarning != null) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    manualWarning!!,
+                                    fontSize = 13.sp,
+                                    color = Color(0xFFE5484D),
+                                )
+                            }
+                            Button(
+                                onClick = {
+                                    attemptSave(force = manualWarning != null)
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 12.dp)
+                                    .height(48.dp),
+                                cornerRadius = 14.dp,
+                                minHeight = 48.dp,
+                                colors = ButtonDefaults.buttonColorsPrimary(),
+                            ) {
+                                Text(
+                                    if (manualWarning != null) "仍要保存" else "保存",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                )
+                            }
+                            Text(
+                                "列表里找不到的活动可直接填全名保存；校验不通过只提示、不拦保存。",
+                                fontSize = 12.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+                    }
+                }
+            }
             item(key = "title") {
                 SmallTitle(
                     text = "指定 activity",
                     insideMargin = PaddingValues(start = 20.dp, top = 8.dp),
                 )
             }
-            if (activities == null) {
+            if (filtered == null) {
                 item(key = "loading") {
                     Text(
                         "正在读取 activity 列表…",
@@ -559,8 +726,16 @@ private fun ActivityListPage(
                         modifier = Modifier.padding(16.dp),
                     )
                 }
+            } else if (filtered.isEmpty()) {
+                item(key = "empty") {
+                    Text(
+                        "没有匹配的 activity，可用上方手动输入直接填全名",
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
             } else {
-                items(activities, key = { it.name }) { entry ->
+                items(filtered, key = { it.name }) { entry ->
                     val isCurrent = current.pkg == pkg &&
                         current.mode == GestureConfig.MODE_ACTIVITY &&
                         current.activity == entry.name
@@ -595,6 +770,39 @@ private fun ActivityListPage(
                 }
             }
         }
+    }
+}
+
+/** 手动输入的类名展开：".Foo" 与裸 "Foo" 按包名补全，全名原样。 */
+private fun expandActivityName(pkg: String, raw: String): String = when {
+    raw.startsWith(".") -> pkg + raw
+    raw.contains(".") -> raw
+    else -> "$pkg.$raw"
+}
+
+/**
+ * 手动目标保存前的软校验：有问题返回提示文案、没问题返回
+ * null。只提示不拦——清单口径与可启动性并不完全等价
+ * （查不到不等于启动不了），最终由用户点「仍要保存」拍板。
+ */
+private fun validateManualTarget(
+    context: Context,
+    pkg: String,
+    activity: String,
+): String? {
+    val pm = context.packageManager
+    val info = try {
+        pm.getPackageInfo(pkg, PackageManager.GET_ACTIVITIES)
+    } catch (t: Throwable) {
+        return "找不到包名为 $pkg 的应用（可能未安装或包名写错），保存后可能打不开"
+    }
+    val entry = info.activities?.firstOrNull { it.name == activity }
+    return when {
+        entry == null ->
+            "该应用已声明的活动里没有 $activity，保存后可能打不开"
+        !entry.exported ->
+            "该活动未导出，保存后可能打不开"
+        else -> null
     }
 }
 

@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.6.0-release.apk
+          cp "$SRC" dist/HonorToolbox-1.6.1-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.6.0-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.6.1-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,48 +66,39 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.6.0
-          name: 荣耀工具箱 1.6.0
+          tag_name: v1.6.1
+          name: 荣耀工具箱 1.6.1
           body: |
-            ## 荣耀工具箱 1.6.0（掌盟净化合入：「应用」页首个功能）
+            ## 荣耀工具箱 1.6.1（目标选择器补手动输入）
 
-            **掌盟净化 PalmPurify 合入**
-            - 独立模块 PalmPurify（给掌上英雄联盟 com.tencent.qt.qtl
-              做去广告、界面精简与导航条沉浸）的全部功能搬进工具箱：
-              透明沉浸、屏蔽开屏广告、底栏精简、隐藏中间加号、
-              首页运营模块精简、拦截推广/会员弹窗、关闭更新提醒、
-              屏蔽摇一摇跳转、调试日志。设置入口在「应用 →
-              掌盟净化」（「应用」页原占位换真内容），9 个开关与
-              独立版一一对应，键名与默认值不变。只做展示层拦截，
-              不碰战绩/资产/活动接口（原模块红线不变）。
-            - 技术移植：原模块基于 libxposed 现代 API + DexKit
-              点位定位，本版把全部拦截点逐处转到传统 Xposed API
-              （与工具箱其余功能同底座，DexKit 保留）；配置通道
-              由 RemotePreferences 换成落盘现读
-              （/sdcard/Download/HonorToolbox/palmpurify/）。
-              旧配置自动迁移：独立版里改过的开关（远程组与本地
-              兜底带显式标记的用户值）由 hook 导出、打开掌盟
-              设置子页时导入一次，读不到静默按默认、不崩。
+            只动设置侧的目标选择器（快服务手势改向），hook 与
+            配置格式零改动：
 
-            **本版追加增强（单独标注）：底栏显示自定义**
-            - 原单一「底栏精简」改为总闸 + 逐项开关：设置子页
-              按 hook 在掌盟里实际命中的底栏项逐项列名，自己
-              勾选留哪些、藏哪些；逐项缺省与原精简结果一致
-              （首页/我的显示、其余隐藏），升级观感不突变。
-            - 均匀分布沿用掌盟底栏宿主自己的机制：底栏行是
-              LinearLayout，显示项一律等权（weight=1）瓜分整行
-              宽度、隐藏项 GONE 不占位——藏掉任意几项，剩下的
-              自动等距铺满；只剩一项时占满整行。
+            - **「选择启动方式」页新增「手动输入」**：包名 +
+              活动类名（全名）两个输入框，填完保存即按指定
+              activity 模式落盘，与列表点选写出的结果完全
+              一致。保存前做软校验：包名对应的应用不存在、
+              或类名不在该应用已声明的活动里、或活动未导出
+              时，只给明确提示、点「仍要保存」即可强制保存
+              （清单里查不到不等于不能启动，不硬拦）；类名
+              为空不许保存。类名写 ".Foo" 或裸名会自动按
+              包名补全。
+            - **活动列表加搜索框**：活动列表按 GET_ACTIVITIES
+              全量枚举所选应用已声明的全部活动（已导出与未
+              导出都列、未导出的标明「未导出，可能打不开」），
+              以前上百个活动只能靠翻，现在可直接按类名搜。
+            - 起因：荣耀搜索首页
+              com.hihonor.search.feature.mainpage.presentation.page.HomeActivity
+              只挂 ACTION_VIEW 深链入口（honorsearch://）、
+              无 LAUNCHER 入口，在长列表里翻不到——现在可在
+              列表里搜 HomeActivity 点选，或手动输入全名直达。
 
-            ⚠️ 装好后请：① 在 LSPosed 作用域里**新增勾选
-            com.tencent.qt.qtl（掌上英雄联盟）**；② **停用旧的
-            独立版 PalmPurify 模块**，避免双重 hook；③ 重启一次
-            掌盟作用域让新 hook 生效。本版未经真机验证，请按需
-            回验：冷启无开屏广告、底栏精简生效、无中间加号、
-            首页运营模块消失但战绩/资产/活动入口都在、推广
-            弹窗被拦截、更新弹窗关闭、摇一摇不跳转、导航条
-            沉浸且底部 tab 不被手势条遮挡、独立版改过的旧
-            配置是否带过来；**底栏逐项任意勾选组合下剩余项
-            均匀分布、藏到只剩一项时不崩**。
+            本版未经真机验证，请按需回验：① 快服务手势改向
+            里选荣耀搜索 → 手动输入
+            com.hihonor.search 与上述 HomeActivity 全名保存
+            → 回桌面从底角斜上滑，应直达荣耀搜索主页；
+            ② 活动列表搜索 HomeActivity 能直接找到并点选；
+            ③ 故意填一个不存在的类名，应先弹提示、点「仍要
+            保存」后能存下；类名留空点保存应被拦。
 
           files: dist/*.apk
