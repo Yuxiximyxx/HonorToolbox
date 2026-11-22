@@ -43,7 +43,7 @@ internal fun PalmPurifyScreen(
     bottomInset: Dp = 0.dp,
 ) {
     var tick by remember { mutableIntStateOf(0) }
-    val bump = { tick++ }
+    val bump: () -> Unit = { tick++ }
 
     LaunchedEffect(Unit) {
         val imported = withContext(Dispatchers.IO) { PalmMigration.importIfNeeded() }
