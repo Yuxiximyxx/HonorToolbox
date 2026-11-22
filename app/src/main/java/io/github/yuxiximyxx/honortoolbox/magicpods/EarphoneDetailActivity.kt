@@ -130,9 +130,18 @@ class EarphoneDetailActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         DeviceIdentity.remember(applicationContext)
         title = currentProfile().displayName
-        // 状态栏保持透明，颜色交给页面自己画；深浅色图标在 setContent 里按主题设置
+        // 全应用沉浸口径（v1.6.3 与 MainActivity 统一）：内容铺到
+        // 物理底边、状态栏/导航条全透明、对比度强制关。本页原先
+        // 没开 edge-to-edge、导航条还按主题写实色，底部是实色带；
+        // 深浅色图标仍在 setContent 里按主题设置。
+        window.setDecorFitsSystemWindows(false)
         @Suppress("DEPRECATION")
-        run { window.statusBarColor = 0x00000000 }
+        run {
+            window.statusBarColor = 0x00000000
+            window.navigationBarColor = 0x00000000
+        }
+        window.isNavigationBarContrastEnforced = false
+        window.isStatusBarContrastEnforced = false
         setContent {
             val dark = isSystemInDarkTheme()
             // ★ 必须在这里先切换调色板：
@@ -147,7 +156,8 @@ class EarphoneDetailActivity : ComponentActivity() {
                     val ctl = WindowCompat.getInsetsController(w, view)
                     ctl.isAppearanceLightStatusBars = !dark
                     ctl.isAppearanceLightNavigationBars = !dark
-                    w.navigationBarColor = if (dark) 0xFF000000.toInt() else 0xFFF2F2F7.toInt()
+                    // 沉浸口径：导航条恒透明（原按主题写实色，v1.6.3 改）
+                    w.navigationBarColor = 0x00000000
                 }
             }
             // MIUIX 迁移（v2.11.0）：主题层换 MiuixTheme，深浅跟随系统（与 P 调色板同一信号 dark）

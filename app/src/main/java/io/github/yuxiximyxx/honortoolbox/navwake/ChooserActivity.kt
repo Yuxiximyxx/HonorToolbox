@@ -36,6 +36,10 @@ class ChooserActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 主题已是透明栏；再关对比度强制，避免系统在手势条
+        // 区域给浮层窗口压黑带（v1.6.3 全应用沉浸口径统一）。
+        window.isNavigationBarContrastEnforced = false
+        window.isStatusBarContrastEnforced = false
         NavConfig.bind(getSharedPreferences(NavConfig.PREFS_NAME, MODE_PRIVATE))
         NavConfig.onChanged = { NavWakeStore.syncFromPrefs(this) }
 

@@ -245,6 +245,12 @@ class MainActivity : ComponentActivity() {
             window.statusBarColor = 0x00000000
             window.navigationBarColor = 0x00000000
         }
+        // 对比度强制必须关（v1.6.3 补）：导航条颜色设了透明
+        // 还不够——强制开着时系统会按「对比度不足」在手势条
+        // 区域压一条不透明黑带，首页与全部子页底部中招的
+        // 就是它（掌盟沉浸控制器对宿主窗口同款关法）。
+        window.isNavigationBarContrastEnforced = false
+        window.isStatusBarContrastEnforced = false
         // 配置绑定（见类注释）：长按唤醒绑定 + 通知中心偏好可读
         NavConfig.bind(getSharedPreferences(NavConfig.PREFS_NAME, MODE_PRIVATE))
         NavConfig.onChanged = { NavWakeStore.syncFromPrefs(this) }

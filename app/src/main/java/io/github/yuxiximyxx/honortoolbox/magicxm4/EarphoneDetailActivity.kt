@@ -129,13 +129,19 @@ class EarphoneDetailActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 全应用沉浸口径（v1.6.3 与 MainActivity 统一）：内容铺到
+        // 物理底边、状态栏/导航条全透明、对比度强制关。本页原先
+        // 没开 edge-to-edge、导航条写死黑色，底部是实色黑带。
+        window.setDecorFitsSystemWindows(false)
         @Suppress("DEPRECATION")
         run {
             window.statusBarColor = 0x00000000
-            window.navigationBarColor = 0xFF000000.toInt()
+            window.navigationBarColor = 0x00000000
             window.decorView.systemUiVisibility = window.decorView.systemUiVisibility and
                 android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
         }
+        window.isNavigationBarContrastEnforced = false
+        window.isStatusBarContrastEnforced = false
         setContent {
             val dark = isSystemInDarkTheme()
             P.apply(dark)
