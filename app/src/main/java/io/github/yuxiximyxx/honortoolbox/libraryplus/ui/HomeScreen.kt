@@ -17,7 +17,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.github.yuxiximyxx.honortoolbox.libraryplus.LpConfig
 import io.github.yuxiximyxx.honortoolbox.libraryplus.ScopeControl
-import io.github.yuxiximyxx.honortoolbox.libraryplus.SearchKeys
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -140,29 +139,6 @@ fun HomeScreen(
                 )
             }
         }
-        item { SmallTitle("荣耀搜索") }
-        item {
-            val s = cfg.search
-            val cleanCount = s.hideCards.size + s.hideHome.size + (if (s.hideAi) 1 else 0) + (if (s.darkWord != SearchKeys.DARK_DEFAULT) 1 else 0)
-            Card(Modifier.padding(horizontal = 12.dp).fillMaxWidth()) {
-                SuperArrow(
-                    title = "净化",
-                    summary = (if (s.reqNoAd) "已关闭广告请求" else "广告请求未关闭") + (if (cleanCount > 0) " · 隐藏 $cleanCount 项" else ""),
-                    onClick = { open("search_clean") },
-                )
-                SuperArrow(
-                    title = "搜索范围",
-                    summary = (if (s.scope.isEmpty()) "来源跟随系统" else "已调整 ${s.scope.size} 个来源") +
-                        (if (s.onlyLocal) " · 只看本机" else if (s.hideTabs.isNotEmpty()) " · 隐藏 ${s.hideTabs.size} 个标签" else ""),
-                    onClick = { open("search_scope") },
-                )
-                SuperArrow(
-                    title = "搜索引擎 · ${SearchKeys.engineName(s.engine)}",
-                    summary = if (s.externalBrowser) "网页结果在外部浏览器打开" else null,
-                    onClick = { open("search_engine") },
-                )
-            }
-        }
         item {
             TextButton(
                 text = if (busy) "正在重启…" else "重启作用域",
@@ -192,7 +168,7 @@ fun HomeScreen(
         }
         item {
             Text(
-                "修改会自动保存并通知桌面、资源库和荣耀搜索；手势在下一次滑动时生效。荣耀搜索的大部分设置需重新打开搜索，若未生效请重启作用域。",
+                "修改会自动保存并通知桌面和资源库；手势在下一次滑动时生效。",
                 modifier = Modifier.padding(horizontal = 28.dp, vertical = 12.dp),
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 style = MiuixTheme.textStyles.footnote1,

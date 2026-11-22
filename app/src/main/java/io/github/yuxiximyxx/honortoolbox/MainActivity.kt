@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -74,6 +75,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
@@ -108,6 +110,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
+import io.github.yuxiximyxx.honortoolbox.libraryplus.HonorSearchScreen
 import io.github.yuxiximyxx.honortoolbox.libraryplus.LibraryPlusScreen
 import io.github.yuxiximyxx.honortoolbox.palmpurify.PalmPurifyScreen
 import io.github.yuxiximyxx.honortoolbox.magicpods.EarphoneDetailActivity
@@ -278,6 +281,18 @@ class MainActivity : ComponentActivity() {
                     val ctl = WindowCompat.getInsetsController(w, view)
                     ctl.isAppearanceLightStatusBars = !dark
                     ctl.isAppearanceLightNavigationBars = !dark
+                    // 沉浸收敛（v1.6.6）：窗口背景按当前生效深浅
+                    // 对齐页面 surface——上方 controller 用的就是
+                    // miuix 0.8.8 默认方案（ThemeController 未传
+                    // 自定义色板），其 surface 经库源码核实为浅色
+                    // #F7F7F7、深色纯黑，与主题 XML 的静态底色
+                    // （values / values-night 的 windowBackground）
+                    // 同值；这里再按运行时 dark 设一遍，覆盖
+                    // 「软件内强制深浅与系统不一致」时 XML 底色
+                    // 对不上的情况，内容没画到的手势条区域不再
+                    // 露出异色窗口底。
+                    val surfaceArgb = (if (dark) Color.Black else Color(0xFFF7F7F7)).toArgb()
+                    w.setBackgroundDrawable(ColorDrawable(surfaceArgb))
                 }
             }
             val controller = remember(dark) {
@@ -326,7 +341,7 @@ class MainActivity : ComponentActivity() {
 private enum class ToolboxTab { Home, System, Apps, Settings }
 
 /** 「系统」页内部页：分组总览 / 四个功能的完整设置子页。 */
-private enum class SystemPage { Root, QuickGesture, NavWake, Shade, NightIcon, LibraryPlus }
+private enum class SystemPage { Root, QuickGesture, NavWake, Shade, NightIcon, LibraryPlus, HonorSearch }
 
 /** 「应用」页内部页：总览 / 掌盟净化设置子页（v1.6.0）。 */
 private enum class AppsPage { Root, PalmPurify }
@@ -524,6 +539,7 @@ private fun ToolboxHost(
                     onOpenShade = { systemPage = SystemPage.Shade },
                     onOpenNightIcon = { systemPage = SystemPage.NightIcon },
                     onOpenLibraryPlus = { systemPage = SystemPage.LibraryPlus },
+                    onOpenHonorSearch = { systemPage = SystemPage.HonorSearch },
                     onOpenEarphone = {
                         context.startActivity(
                             Intent(context, EarphoneDetailActivity::class.java),
@@ -548,6 +564,10 @@ private fun ToolboxHost(
                     bottomInset = bottomInset,
                 )
                 SystemPage.LibraryPlus -> LibraryPlusScreen(
+                    onBack = { systemPage = SystemPage.Root },
+                    bottomInset = bottomInset,
+                )
+                SystemPage.HonorSearch -> HonorSearchScreen(
                     onBack = { systemPage = SystemPage.Root },
                     bottomInset = bottomInset,
                 )
@@ -584,12 +604,12 @@ private fun ToolboxHost(
         }
     }
 
-    // v1.6.5：一级页面导航条沉浸补根——窗口主题的
-    // windowBackground 是 transparent（Chooser 等其它入口
-    // 在用的口径，不动主题本身），四栏页此前没有一层画到
-    // 屏幕物理底边：采样层与各页内容都止于内容区，手势条
-    // 区域露的是透明窗口背后的黑场（二级详情页没这问题，
-    // 是其根部把 surface 画满了整个窗口）。这里与详情页
+    // v1.6.5：一级页面导航条沉浸补根——四栏页此前没有
+    // 一层画到屏幕物理底边：采样层与各页内容都止于内容
+    // 区，手势条区域露出的是与页面异色的窗口底（夜间
+    // #121212 对页面纯黑 surface，见 v1.6.6 的主题与窗口
+    // 背景对齐；二级详情页没这问题，是其根部把 surface
+    // 画满了整个窗口）。这里与详情页
     // 同款：宿主最外层先铺一层 fillMaxSize 的主题 surface
     // 画满整个窗口（含导航条区域），再叠内容与悬浮 Dock；
     // 铺色层在采样层之下，采样层与 Dock 的位置/尺寸/手势
@@ -1860,6 +1880,7 @@ private fun SystemScreen(
     onOpenShade: () -> Unit,
     onOpenNightIcon: () -> Unit,
     onOpenLibraryPlus: () -> Unit,
+    onOpenHonorSearch: () -> Unit,
     onOpenEarphone: () -> Unit,
     onOpenXm4: () -> Unit,
 ) {
@@ -1932,8 +1953,13 @@ private fun SystemScreen(
                     )
                     SuperArrow(
                         title = "资源库增强",
-                        summary = "隐藏应用、文件夹改名与新建分类、桌面手势、荣耀搜索净化",
+                        summary = "隐藏应用、文件夹改名与新建分类、桌面手势",
                         onClick = onOpenLibraryPlus,
+                    )
+                    SuperArrow(
+                        title = "荣耀搜索",
+                        summary = "净化、搜索范围与搜索引擎",
+                        onClick = onOpenHonorSearch,
                     )
                 }
 

@@ -16,12 +16,52 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.extra.SuperArrow
 import top.yukonga.miuix.kmp.extra.SuperDropdown
 import top.yukonga.miuix.kmp.extra.SuperRadioButton
 import top.yukonga.miuix.kmp.extra.SuperSwitch
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 private fun LpConfig.withSearch(f: (SearchCfg) -> SearchCfg): LpConfig = copy(search = f(search))
+
+/**
+ * 「荣耀搜索」独立子页（v1.6.6 从资源库增强主页拆出、与
+ * 资源库增强平级）：承载净化 / 搜索范围 / 搜索引擎三个入口，
+ * 摘要口径与原主页的荣耀搜索组完全一致，配置仍是同一份
+ * [LpConfig.search]，键名、默认值与落盘通道不变。
+ */
+@Composable
+fun HonorSearchHomeScreen(
+    cfg: LpConfig,
+    open: (String) -> Unit,
+    onBack: (() -> Unit)? = null,
+) {
+    val s = cfg.search
+    val cleanCount = s.hideCards.size + s.hideHome.size + (if (s.hideAi) 1 else 0) + (if (s.darkWord != SearchKeys.DARK_DEFAULT) 1 else 0)
+    MiuixPage(title = "荣耀搜索", onBack = onBack) {
+        item {
+            Card(Modifier.padding(horizontal = 12.dp).fillMaxWidth()) {
+                SuperArrow(
+                    title = "净化",
+                    summary = (if (s.reqNoAd) "已关闭广告请求" else "广告请求未关闭") + (if (cleanCount > 0) " · 隐藏 $cleanCount 项" else ""),
+                    onClick = { open("search_clean") },
+                )
+                SuperArrow(
+                    title = "搜索范围",
+                    summary = (if (s.scope.isEmpty()) "来源跟随系统" else "已调整 ${s.scope.size} 个来源") +
+                        (if (s.onlyLocal) " · 只看本机" else if (s.hideTabs.isNotEmpty()) " · 隐藏 ${s.hideTabs.size} 个标签" else ""),
+                    onClick = { open("search_scope") },
+                )
+                SuperArrow(
+                    title = "搜索引擎 · ${SearchKeys.engineName(s.engine)}",
+                    summary = if (s.externalBrowser) "网页结果在外部浏览器打开" else null,
+                    onClick = { open("search_engine") },
+                )
+            }
+        }
+        item { Footnote("修改会自动保存并通知荣耀搜索；大部分设置需重新打开搜索后生效，若未生效请重启作用域。") }
+    }
+}
 
 @Composable
 private fun Footnote(text: String) {

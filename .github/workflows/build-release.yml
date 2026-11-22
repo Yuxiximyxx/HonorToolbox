@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.6.5-release.apk
+          cp "$SRC" dist/HonorToolbox-1.6.6-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.6.5-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.6.6-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,53 +66,52 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.6.5
-          name: 荣耀工具箱 1.6.5
+          tag_name: v1.6.6
+          name: 荣耀工具箱 1.6.6
           body: |
-            ## 荣耀工具箱 1.6.5（快服务改向换 Provider 通道 / 一级页面导航条沉浸补根）
+            ## 荣耀工具箱 1.6.6（荣耀搜索升平级 / 一级页面导航条沉浸收敛修）
 
-            长按唤醒在 v1.6.4 已真机确认修好，本版未动
-            NavWake；掌盟与其它功能一律未动。
+            快服务手势改向已在 v1.6.5 真机确认生效，本版
+            未动快服务、长按唤醒与掌盟；两处改动都只动
+            呈现，功能、默认值、落盘键与 hook 行为不变。
 
-            **一、快服务手势改向：Settings.Global 写不进去，换 ContentProvider 通道**
-            v1.6.4 加的 Settings.Global 通道真机仍不生效：
-            工具箱没有 WRITE_SETTINGS、也从未被授予「修改
-            系统设置」，设置侧 putString 必然失败（只在日志
-            里留痕、设置页无感），hook 回退到文件通道、而
-            快服务进程没有直读 Download 的权限，照旧放行。
-            本版新增一条不需要任何特殊权限的跨进程通道：
-            - 工具箱新增 exported 的 ContentProvider
-              （authority io.github.yuxiximyxx.honortoolbox.quickgesture，
-              与资源库增强的 Provider 同范式 call("get")）：
-              在工具箱进程内读与设置页同源的镜像偏好、供出
-              当前配置文本，页面显示什么 hook 就读到什么；
-            - hook 侧读序改为 Provider → Settings.Global
-              （保留）→ 文件候选扫描（兜底），判定逻辑零
-              改动；查询只在安装自检与手势命中时发生，异常
-              一律回退、绝不阻塞手势判定；
-            - 安装行与命中行日志的来源扩展为
-              provider/global/file/none；
-            - 改向设置页新增一行通道状态：最近一次保存的
-              文件 / 系统设置项同步结果，页面上直接可见。
+            **一、荣耀搜索从资源库增强里拆出来平级**
+            此前荣耀搜索的设置混在「资源库增强」子页里，
+            本版拆出：系统页 → 桌面组里「资源库增强」与
+            「荣耀搜索」两行并列同级，点「荣耀搜索」进
+            独立子页，承载原先的净化 / 搜索范围 / 搜索引擎
+            三个入口（摘要口径与原先一致）；「资源库增强」
+            子页只留资源库与桌面本份的行（资源库四项 +
+            桌面手势三项 + 重启作用域与状态区）。搜索三
+            子页的配置仍是同一份、键名与落盘通道不变，
+            已调好的开关状态不丢；子页返回落点改为搜索
+            主页。
 
-            **二、一级页面导航条不沉浸：根部没人画最底下那条**
-            二级界面（耳机详情等独立 Activity）已沉浸、
-            一级四栏页仍有黑带：窗口设置两边一致，差别在
-            绘制——详情页根部把主题 surface 画满整个窗口，
-            而四栏页的窗口背景是透明的（主题口径不动），
-            内容与采样层都没画到屏幕物理底边，Dock 以下
-            露的是透明窗口背后的黑场。本版让 MainActivity
-            宿主最外层与详情页同款：先铺一层 fillMaxSize
-            的主题 surface 画满整个窗口（含导航条区域）、
-            再叠内容与悬浮 Dock；铺色层在采样层之下，玻璃
-            采样与 Dock 的位置/尺寸/手势逻辑一律不动。
+            **二、一级页面导航条沉浸：窗口底色与页面色不一致**
+            三轮反馈后定位到实差：夜间主题的窗口背景是
+            #121212，而页面底色（miuix 0.8.8 默认深色方案
+            的 surface，经库源码核实）是纯黑——只要窗口
+            有一条没被内容画到，露出的就是这块异色窗口
+            底，看着就是黑带；浅色侧同理（页面 #F7F7F7
+            对 Material 默认底 #FAFAFA）。本版双保险对齐：
+            - 主题 XML 显式写 windowBackground：浅色
+              #FFF7F7F7、深色 #FF000000，与页面 surface
+              同值（色值出处：miuix v0.8.8 Colors.kt 的
+              lightColorScheme / darkColorScheme，本应用
+              ThemeController 未传自定义色板）；
+            - MainActivity 的窗口 SideEffect 按当前生效
+              深浅（软件主题设置与系统深浅合成）再把窗口
+              背景设为同一 surface 色，覆盖软件内强制
+              深 / 浅与系统不一致时 XML 底色对不上的情况。
+            v1.6.5 的根部铺色与窗口标志（decorFits / 透明
+            栏色 / 对比度强制关）保留不动；Chooser 半透明
+            主题未动。
 
-            **复验点**：① 快服务改向：打开改向设置页确认
-            配置在（页面底部有「配置已保存」通道状态行）→
-            强停快服务 → 底角斜滑应直达荣耀搜索主页；
-            LSPosed 日志里快服务安装行/命中行应带
-            source=provider；② 沉浸：四栏页（首页/系统/
-            应用/设置）底部手势条区域应与页面同色、不再
-            黑带，子页不回归。
+            **复验点**：① 搜索平级：系统页桌面组应见
+            「资源库增强 / 荣耀搜索」两行并列；点荣耀搜索
+            进独立子页，三入口与原先一致、开关状态不丢；
+            资源库增强页只剩资源库与桌面手势。② 沉浸：
+            深色下四栏页底部手势条区域应与页面同为一调、
+            无黑带，浅色下同样无色差带。
 
           files: dist/*.apk

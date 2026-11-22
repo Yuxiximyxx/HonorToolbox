@@ -2,6 +2,8 @@
     <style name="Theme.HonorToolbox" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- 窗口底色与页面 surface 对齐（v1.6.6）：miuix 0.8.8 默认浅色方案 surface = #F7F7F7（库源码 Colors.kt lightColorScheme 核实，本应用 ThemeController 未传自定义色板、页面底色口径亦同此值）；Material Light 默认底色是 #FAFAFA，不一致会在内容没画到的手势条区域露出色差带。运行时再由 MainActivity 的 SideEffect 按生效深浅设一遍同值。 -->
+        <item name="android:windowBackground">#FFF7F7F7</item>
     </style>
     <style name="Theme.HonorToolbox.Chooser" parent="@android:style/Theme.DeviceDefault.NoActionBar">
         <item name="android:windowBackground">@android:color/transparent</item>
