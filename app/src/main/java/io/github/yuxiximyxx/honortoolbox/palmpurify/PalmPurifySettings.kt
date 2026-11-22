@@ -36,6 +36,10 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * hook 在掌盟里实际命中的底栏项标签（[PalmPrefs.tabLabels]），
  * 没发现记录时先列缺省的「首页/我的」两项并注明其余项要
  * 打开一次掌盟后才出现。
+ *
+ * v1.6.1：名单改按 [PalmPrefs.tabEntries] 全量列（稳定身份
+ * 制，纯图标项也记得到，不再只有带文字的三项）；逐项开关
+ * 读值走 [PalmPrefs.tabShow] 旧键兼容读、写只写新键。
  */
 @Composable
 internal fun PalmPurifyScreen(
@@ -98,8 +102,8 @@ internal fun PalmPurifyScreen(
                         default = ModulePrefs.DEFAULT_SLIM_TABBAR,
                         bump = bump,
                     )
-                    val labels = PalmPrefs.tabLabels()
-                    if (labels.isEmpty()) {
+                    val entries = PalmPrefs.tabEntries()
+                    if (entries.isEmpty()) {
                         PalmSwitch(
                             title = "首页",
                             summary = "底栏功能项（逐项名单待打开一次掌盟后补齐）",
@@ -117,12 +121,9 @@ internal fun PalmPurifyScreen(
                             bump = bump,
                         )
                     } else {
-                        for (label in labels) {
-                            PalmSwitch(
-                                title = label,
-                                summary = "在底栏显示这一项；藏掉后其余项自动等距铺满",
-                                key = PalmPrefs.tabShowKey(label),
-                                default = PalmPrefs.defaultTabShow(label),
+                        for (entry in entries) {
+                            PalmTabSwitch(
+                                entry = entry,
                                 enabled = gate,
                                 bump = bump,
                             )
@@ -189,6 +190,33 @@ internal fun PalmPurifyScreen(
             }
         }
     }
+}
+
+/**
+ * 一个底栏逐项开关行（v1.6.1）：读走 [PalmPrefs.tabShow]
+ * 旧键兼容读（v1.6.0 已调的值不失效），写只写新键
+ * `tab_show_<身份>`，写过一次即完成该项的键迁移。
+ */
+@Composable
+private fun PalmTabSwitch(
+    entry: PalmPrefs.TabEntry,
+    enabled: Boolean = true,
+    bump: () -> Unit,
+) {
+    SuperSwitch(
+        title = entry.title,
+        summary = "在底栏显示这一项；藏掉后其余项自动等距铺满",
+        checked = PalmPrefs.tabShow(
+            entry.identity,
+            entry.legacyLabel,
+            PalmPrefs.defaultTabShow(entry),
+        ),
+        enabled = enabled,
+        onCheckedChange = { value ->
+            PalmPrefs.putBool(PalmPrefs.tabShowKey(entry.identity), value)
+            bump()
+        },
+    )
 }
 
 /** 一个 PalmPurify 开关行：读走 [PalmPrefs] 现读，写即落盘并触发重组刷新。 */

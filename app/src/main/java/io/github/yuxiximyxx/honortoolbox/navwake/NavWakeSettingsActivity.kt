@@ -293,7 +293,16 @@ internal fun NavWakeScreen(onBack: () -> Unit, bottomInset: Dp = 0.dp) {
                     }
                 }
                 Button(
-                    modifier = Modifier.padding(16.dp),
+                    // v1.6.1：底部留白按宿主既有公式补 bottomInset
+                    // （栏高+间隙+呼吸+导航条 inset 已由宿主算好
+                    // 传入）——原先只有 16.dp，按钮是固定底区、
+                    // 悬浮底栏正压在它上半截（小乐截图实证）。
+                    modifier = Modifier.padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 16.dp,
+                        bottom = 16.dp + bottomInset,
+                    ),
                     colors = ButtonDefaults.buttonColorsPrimary(),
                     onClick = {
                         // 保持列表展示顺序（按应用名排序后的顺序）保存
