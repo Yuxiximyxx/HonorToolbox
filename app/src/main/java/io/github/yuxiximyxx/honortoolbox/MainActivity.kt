@@ -584,6 +584,21 @@ private fun ToolboxHost(
         }
     }
 
+    // v1.6.5：一级页面导航条沉浸补根——窗口主题的
+    // windowBackground 是 transparent（Chooser 等其它入口
+    // 在用的口径，不动主题本身），四栏页此前没有一层画到
+    // 屏幕物理底边：采样层与各页内容都止于内容区，手势条
+    // 区域露的是透明窗口背后的黑场（二级详情页没这问题，
+    // 是其根部把 surface 画满了整个窗口）。这里与详情页
+    // 同款：宿主最外层先铺一层 fillMaxSize 的主题 surface
+    // 画满整个窗口（含导航条区域），再叠内容与悬浮 Dock；
+    // 铺色层在采样层之下，采样层与 Dock 的位置/尺寸/手势
+    // 逻辑一律不动。
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MiuixTheme.colorScheme.surface),
+    ) {
     if (floatingBar) {
         // 玻璃采样：内容整层经 Kyant 的 layerBackdrop 录制成
         // 采样源，悬浮栏（内容 Box 的兄弟节点、不在录制子树
@@ -645,6 +660,7 @@ private fun ToolboxHost(
                 )
             }
         }
+    }
     }
 }
 

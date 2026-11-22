@@ -175,6 +175,22 @@ internal fun QuickGestureScreen(onExit: () -> Unit, bottomInset: Dp = 0.dp) {
         )
     }
     var syncError by remember { mutableStateOf<String?>(null) }
+    // 通道状态行（v1.6.5）：最近一次保存的本地结果——文件与
+    // Settings.Global 两条写通道各自动作如何，页面上直接可
+    // 见，下轮排查不用再导日志（hook 侧实际读哪条由其 diag
+    // 的 source 字段记，provider 通道不需要工具箱写什么）。
+    var channelLine by remember { mutableStateOf<String?>(null) }
+
+    /** 一次写通道的结果统一回填：错误提示 + 通道状态行。 */
+    fun applyWriteResult(ok: Boolean) {
+        syncError = if (ok) null else "配置同步失败，请再操作一次"
+        channelLine = if (ok) {
+            "配置已保存 · 文件通道：已写入 · 系统设置项：" +
+                if (ConfigWriter.lastGlobalSyncOk == true) "已同步" else "未同步"
+        } else {
+            "配置未保存 · 文件通道：写入失败"
+        }
+    }
 
     /** 任一变更的统一落盘：先存本地偏好，再写 hook 通道文件并校验。 */
     fun persist(next: GestureConfig) {
@@ -189,7 +205,7 @@ internal fun QuickGestureScreen(onExit: () -> Unit, bottomInset: Dp = 0.dp) {
             val ok = withContext(Dispatchers.IO) {
                 ConfigWriter.writeConfig(context, next)
             }
-            syncError = if (ok) null else "配置同步失败，请再操作一次"
+            applyWriteResult(ok)
         }
     }
 
@@ -200,7 +216,7 @@ internal fun QuickGestureScreen(onExit: () -> Unit, bottomInset: Dp = 0.dp) {
         val ok = withContext(Dispatchers.IO) {
             ConfigWriter.writeConfig(context, current)
         }
-        if (!ok) syncError = "配置同步失败，请再操作一次"
+        applyWriteResult(ok)
     }
 
     // 选目标流程的中间状态
@@ -304,6 +320,7 @@ internal fun QuickGestureScreen(onExit: () -> Unit, bottomInset: Dp = 0.dp) {
                 bottomInset = bottomInset,
                 config = config,
                 syncError = syncError,
+                channelLine = channelLine,
                 onEnabledChange = { persist(config.copy(enabled = it)) },
                 onPickTarget = { page = PAGE_APPS },
                 onClearTarget = {
@@ -320,6 +337,7 @@ private fun HomePage(
     bottomInset: Dp = 0.dp,
     config: GestureConfig,
     syncError: String?,
+    channelLine: String?,
     onEnabledChange: (Boolean) -> Unit,
     onPickTarget: () -> Unit,
     onClearTarget: () -> Unit,
@@ -407,6 +425,15 @@ private fun HomePage(
                     syncError,
                     fontSize = 13.sp,
                     color = Color(0xFFE5484D),
+                )
+            }
+
+            if (channelLine != null) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    channelLine,
+                    fontSize = 13.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 )
             }
 

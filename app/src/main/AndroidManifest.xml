@@ -136,6 +136,16 @@
             android:authorities="io.github.yuxiximyxx.honortoolbox.config"
             android:exported="true" />
 
+        <!-- 快服务手势改向的配置 Provider（v1.6.5）：文件通道在
+             快服务进程里读不到、Settings.Global 通道写不进去，
+             改由 hook 进程经本 Provider 跨进程读当前配置
+             （call("get")，数据源与设置页同源的镜像偏好）。
+             authority 与资源库那个错开。 -->
+        <provider
+            android:name=".quickgesture.QuickGestureConfigProvider"
+            android:authorities="io.github.yuxiximyxx.honortoolbox.quickgesture"
+            android:exported="true" />
+
         <!-- Xposed Module 声明（传统 API） -->
         <meta-data
             android:name="xposedmodule"

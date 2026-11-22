@@ -145,9 +145,11 @@ class QuickGestureHook : IXposedHookLoadPackage {
             // 设置页显示与 hook 实际读到的是否一致，一眼可查
             // （v1.6.1 真机反馈改向不生效，先要分清是没装上、
             // 没读到配置，还是 from_tag 没命中）。
-            // v1.6.4：带上配置来源（global/file/none）——快服务
-            // 进程读不到 Download 文件，配置改走 Settings.Global
-            // 通道优先（见 ConfigStore）；安装时刻经
+            // v1.6.4：带上配置来源——快服务进程读不到
+            // Download 文件，配置改走跨进程通道（见
+            // ConfigStore）；v1.6.5 起读序为 Provider →
+            // Settings.Global → 文件，来源记
+            // provider/global/file/none。安装时刻经
             // ActivityThread 取宿主 Application 作 Context，
             // 取不到就只走文件通道、来源记 file/none。
             val atInstall = ConfigStore.readConfig(hostContext())

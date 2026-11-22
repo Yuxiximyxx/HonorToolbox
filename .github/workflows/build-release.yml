@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.6.4-release.apk
+          cp "$SRC" dist/HonorToolbox-1.6.5-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.6.4-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.6.5-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,52 +66,53 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.6.4
-          name: 荣耀工具箱 1.6.4
+          tag_name: v1.6.5
+          name: 荣耀工具箱 1.6.5
           body: |
-            ## 荣耀工具箱 1.6.4（修两条配置通道：长按唤醒读旧配置 / 快服务读不到配置）
+            ## 荣耀工具箱 1.6.5（快服务改向换 Provider 通道 / 一级页面导航条沉浸补根）
 
-            两条根因都由小乐导出的 LSPosed 日志实证，只修
-            这两条，其余功能（掌盟等）一律未动。
+            长按唤醒在 v1.6.4 已真机确认修好，本版未动
+            NavWake；掌盟与其它功能一律未动。
 
-            **一、长按导航条唤醒：hook 一直读 11-21 的旧配置**
-            设置侧经 MediaStore 写 navwake.txt 时，删除旧
-            文件的步骤实际没删掉（相对路径等值查不中、精确
-            文件名也匹配不到改名副本），每写一次就多一份
-            「navwake (n).txt」（真机已堆到 (7)），正本停在
-            旧内容（总开关开着、但默认目标与已选应用为空）；
-            而 hook 侧只读正本，于是每次长按都判「没目标、
-            放行」继续唤 YOYO。本版双修：
-            - 写侧：删除步改成真删——先查出目录下全部同名
-              候选（含 (n) 副本）逐个删除，再写新的一份，
-              副本不再堆积、正本即最新；
-            - 读侧：候选口径与仓内其余落盘通道对齐——扫
-              目录下全部 navwake (n).txt、取修改时间最新
-              一份解析，存量副本里的最新配置也能被读到。
+            **一、快服务手势改向：Settings.Global 写不进去，换 ContentProvider 通道**
+            v1.6.4 加的 Settings.Global 通道真机仍不生效：
+            工具箱没有 WRITE_SETTINGS、也从未被授予「修改
+            系统设置」，设置侧 putString 必然失败（只在日志
+            里留痕、设置页无感），hook 回退到文件通道、而
+            快服务进程没有直读 Download 的权限，照旧放行。
+            本版新增一条不需要任何特殊权限的跨进程通道：
+            - 工具箱新增 exported 的 ContentProvider
+              （authority io.github.yuxiximyxx.honortoolbox.quickgesture，
+              与资源库增强的 Provider 同范式 call("get")）：
+              在工具箱进程内读与设置页同源的镜像偏好、供出
+              当前配置文本，页面显示什么 hook 就读到什么；
+            - hook 侧读序改为 Provider → Settings.Global
+              （保留）→ 文件候选扫描（兜底），判定逻辑零
+              改动；查询只在安装自检与手势命中时发生，异常
+              一律回退、绝不阻塞手势判定；
+            - 安装行与命中行日志的来源扩展为
+              provider/global/file/none；
+            - 改向设置页新增一行通道状态：最近一次保存的
+              文件 / 系统设置项同步结果，页面上直接可见。
 
-            **二、快服务手势改向：hook 在快服务进程里读不到配置**
-            配置文件本身存在且内容正确，但快服务进程没有
-            直读 /sdcard/Download 的权限，hook 侧目录扫描
-            拿不到任何候选（同一文件在系统界面进程里可
-            读），安装行与每次斜滑命中都只能报「配置读不
-            到、放行」。本版给 hook 侧加一条不需要存储权
-            限的通道（与耳机功能的 Settings.Global 跨进程
-            桥同模式）：
-            - 设置侧每次文件写成功后，把同一份配置同步
-              写入 Settings.Global 键
-              honortoolbox_quickgesture_config（同步失败
-              只留痕、不影响文件通道结果）；
-            - hook 侧先读该键、解析成功就用，读不到再
-              回退原来的文件候选扫描；判定逻辑零改动；
-            - 安装行与命中行日志带上配置来源
-              （global/file/none），下轮可直接分辨。
+            **二、一级页面导航条不沉浸：根部没人画最底下那条**
+            二级界面（耳机详情等独立 Activity）已沉浸、
+            一级四栏页仍有黑带：窗口设置两边一致，差别在
+            绘制——详情页根部把主题 surface 画满整个窗口，
+            而四栏页的窗口背景是透明的（主题口径不动），
+            内容与采样层都没画到屏幕物理底边，Dock 以下
+            露的是透明窗口背后的黑场。本版让 MainActivity
+            宿主最外层与详情页同款：先铺一层 fillMaxSize
+            的主题 surface 画满整个窗口（含导航条区域）、
+            再叠内容与悬浮 Dock；铺色层在采样层之下，玻璃
+            采样与 Dock 的位置/尺寸/手势逻辑一律不动。
 
-            **复验点**：① 长按唤醒：改一次目标保存 → 用
-            首页「重启系统界面」→ 长按导航条应直达所选
-            应用；② 快服务改向：保存配置 → 强停快服务
-            → 底角斜滑应直达荣耀搜索主页；③ 若仍不行，
-            把 LSPosed 日志再导一份：长按唤醒安装行应显
-            示默认目标已设、快服务安装行应带
-            source=global。
+            **复验点**：① 快服务改向：打开改向设置页确认
+            配置在（页面底部有「配置已保存」通道状态行）→
+            强停快服务 → 底角斜滑应直达荣耀搜索主页；
+            LSPosed 日志里快服务安装行/命中行应带
+            source=provider；② 沉浸：四栏页（首页/系统/
+            应用/设置）底部手势条区域应与页面同色、不再
+            黑带，子页不回归。
 
           files: dist/*.apk

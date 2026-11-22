@@ -40,9 +40,22 @@ import java.io.File
  * 把同一份格式化文本同步写入 Settings.Global 的
  * [GLOBAL_KEY] 键（与 MagicPods 的 Settings.Global 跨进程
  * 桥同模式，读它不需要存储权限）；hook 侧 [readConfig]
- * 先读该键、像本格式的文本就解析采用，读不到再回退文件
+ * 读该键、像本格式的文本就解析采用，读不到再回退文件
  * 候选扫描。每次读取实际走的通道记在 [lastReadSource]，
  * hook 的 diag 日志会带出来，下轮取证可直接分辨。
+ *
+ * ContentProvider 通道（v1.6.5 新增，hook 侧首选）：真机
+ * 实证 v1.6.4 的 Global 通道写不进去——工具箱没有
+ * WRITE_SETTINGS、用户也从未授「修改系统设置」，
+ * syncGlobal 的 putString 必然失败（只 Log.w 留痕），
+ * hook 回退文件通道照旧读不到。改为工具箱自带一个
+ * exported 的 [QuickGestureConfigProvider]（与资源库增强
+ * 的 ConfigProvider 同范式：call("get") 返回 Bundle）：
+ * 它在工具箱进程内读设置页同源的镜像偏好
+ * [readMirrorConfig] 并按 [format] 供出配置文本，任何
+ * 进程查询都不需要特殊权限。hook 侧 [readConfig] 读序：
+ * Provider → Settings.Global（保留，万一将来授了权）→
+ * 文件候选扫描（兜底）。
  */
 data class GestureConfig(
     val enabled: Boolean = false,
@@ -106,21 +119,58 @@ object ConfigStore {
     const val GLOBAL_KEY = "honortoolbox_quickgesture_config"
 
     /**
-     * 最近一次 [readConfig] 实际命中的通道："global" /
-     * "file" / "none"。hook 侧 diag 日志据此留痕。
+     * ContentProvider 通道（v1.6.5）：authority 独立于资源库
+     * 增强已占用的 io.github.yuxiximyxx.honortoolbox.config；
+     * 方法与载荷键与 ConfigProvider 的 get 范式一致。
+     */
+    const val PROVIDER_AUTHORITY = "io.github.yuxiximyxx.honortoolbox.quickgesture"
+    const val PROVIDER_METHOD_GET = "get"
+    const val PROVIDER_EXTRA_CONFIG = "config"
+
+    /** 设置侧镜像偏好（设置页显示与系统页开关共用同一份）。 */
+    const val SETTINGS_PREFS_NAME = "quickgesture_settings"
+
+    /**
+     * 读设置侧镜像偏好（provider 的数据源）：与设置页读回
+     * 展示、系统页开关读写的是同一份偏好、同一组键与默认
+     * 值，保证 provider 供出的就是页面上显示的当前配置。
+     * 只在工具箱进程内调用（provider / 设置侧）。
+     */
+    fun readMirrorConfig(context: Context): GestureConfig {
+        val prefs = context.getSharedPreferences(SETTINGS_PREFS_NAME, Context.MODE_PRIVATE)
+        return GestureConfig(
+            enabled = prefs.getBoolean("enabled", false),
+            mode = prefs.getString("mode", GestureConfig.MODE_APP)
+                ?: GestureConfig.MODE_APP,
+            pkg = prefs.getString("package", "") ?: "",
+            activity = prefs.getString("activity", "") ?: "",
+        )
+    }
+
+    /**
+     * 最近一次 [readConfig] 实际命中的通道："provider" /
+     * "global" / "file" / "none"。hook 侧 diag 日志据此留痕。
      */
     @Volatile
     var lastReadSource: String = "none"
         private set
 
     /**
-     * hook 侧读取：先 Settings.Global（[context] 非空时），
-     * 读到形如本格式（含 enabled= 行）的文本即解析采用；
-     * 否则回退文件候选扫描。[context] 为 null 时直接走文件
-     * 通道（安装时拿不到宿主 Context 的场合）。
+     * hook 侧读取（[context] 非空时）：依次走 Provider →
+     * Settings.Global → 文件候选扫描，任一通道读到形如本
+     * 格式（含 enabled= 行）的文本即解析采用；全部失败返回
+     * null（调用方按未配置放行）。[context] 为 null 时直接
+     * 走文件通道（安装时拿不到宿主 Context 的场合）。
+     * Provider 查询是同步跨进程调用、只在安装自检与手势
+     * 命中时发生，异常一律吞掉回退下一通道，绝不阻塞判定。
      */
     fun readConfig(context: Context?): GestureConfig? {
         if (context != null) {
+            val fromProvider = readConfigFromProvider(context)
+            if (fromProvider != null) {
+                lastReadSource = "provider"
+                return fromProvider
+            }
             val fromGlobal = try {
                 Settings.Global.getString(context.contentResolver, GLOBAL_KEY)
             } catch (t: Throwable) {
@@ -134,6 +184,31 @@ object ConfigStore {
         val fromFile = readConfigFromFile()
         lastReadSource = if (fromFile != null) "file" else "none"
         return fromFile
+    }
+
+    /**
+     * Provider 通道读取：向工具箱的
+     * [QuickGestureConfigProvider] 发 call("get")，取回
+     * Bundle 里的配置文本解析。查不到/异常/文本不像本
+     * 格式一律返回 null、由调用方回退下一通道。
+     */
+    private fun readConfigFromProvider(context: Context): GestureConfig? {
+        return try {
+            val bundle = context.contentResolver.call(
+                Uri.parse("content://$PROVIDER_AUTHORITY"),
+                PROVIDER_METHOD_GET,
+                null,
+                null,
+            )
+            val text = bundle?.getString(PROVIDER_EXTRA_CONFIG)
+            if (!text.isNullOrBlank() && text.contains("enabled=")) {
+                parse(text)
+            } else {
+                null
+            }
+        } catch (t: Throwable) {
+            null
+        }
     }
 
     /** 无 Context 的兼容入口（等价 readConfig(null)，只走文件通道）。 */
