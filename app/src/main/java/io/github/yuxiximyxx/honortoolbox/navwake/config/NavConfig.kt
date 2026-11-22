@@ -29,11 +29,20 @@ object NavConfig {
     private const val KEY_LOG_LEVEL = "log_level"
     private const val KEY_PROBE_MODE = "probe_mode"
 
-    /** 落盘候选（直读路径，与其它工具箱功能同一组候选）。 */
-    private val CANDIDATE_PATHS = listOf(
-        "/storage/emulated/0/Download/HonorToolbox/$FILE_NAME",
-        "/sdcard/Download/HonorToolbox/$FILE_NAME"
-    )
+    /** 落盘目录（与其它工具箱功能同一落点）。 */
+    private val BASE_DIR = File("/sdcard/Download/HonorToolbox")
+
+    /**
+     * 候选文件名：正本与 MediaStore 改名产生的「navwake (n).txt」
+     * 副本（与 FeatureGate/ConfigStore/ActivationStatus 同一口径）。
+     *
+     * v1.6.4 前的教训：旧候选只有正本的两条等价路径，而设置侧
+     * 经 MediaStore 写入时删不掉旧文件、每次新写都被改名成
+     * (n) 副本，正本停在旧内容——hook 永远读到过期配置（真机
+     * LSPosed 日志实证：安装行恒为旧快照）。现改为扫目录取
+     * mtime 最新一份，与仓内其余落盘通道一致。
+     */
+    private val CANDIDATE_NAME = Regex("""navwake( \(\d+\))?\.txt""")
 
     @Volatile
     private var prefs: SharedPreferences? = null
@@ -64,9 +73,17 @@ object NavConfig {
     }
 
     private fun readLatestFile(): Map<String, String>? {
-        val file = CANDIDATE_PATHS.map { File(it) }
-            .filter { it.isFile }
-            .maxByOrNull { it.lastModified() } ?: return null
+        val files = try {
+            BASE_DIR.listFiles() ?: emptyArray()
+        } catch (t: Throwable) {
+            emptyArray()
+        }
+        var best: File? = null
+        for (f in files) {
+            if (!f.isFile || !CANDIDATE_NAME.matches(f.name)) continue
+            if (best == null || f.lastModified() > best.lastModified()) best = f
+        }
+        val file = best ?: return null
         return runCatching {
             val map = mutableMapOf<String, String>()
             file.readLines().forEach { raw ->

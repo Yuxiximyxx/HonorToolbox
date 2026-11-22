@@ -4,6 +4,7 @@ import io.github.yuxiximyxx.honortoolbox.BuildConfig
 
 import android.app.Activity
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import de.robv.android.xposed.IXposedHookLoadPackage
@@ -144,18 +145,41 @@ class QuickGestureHook : IXposedHookLoadPackage {
             // 设置页显示与 hook 实际读到的是否一致，一眼可查
             // （v1.6.1 真机反馈改向不生效，先要分清是没装上、
             // 没读到配置，还是 from_tag 没命中）。
-            val atInstall = ConfigStore.readConfig()
+            // v1.6.4：带上配置来源（global/file/none）——快服务
+            // 进程读不到 Download 文件，配置改走 Settings.Global
+            // 通道优先（见 ConfigStore）；安装时刻经
+            // ActivityThread 取宿主 Application 作 Context，
+            // 取不到就只走文件通道、来源记 file/none。
+            val atInstall = ConfigStore.readConfig(hostContext())
             diag(
                 if (atInstall == null) {
-                    "config at install: unreadable/none -> PASS until configured"
+                    "config at install: unreadable/none " +
+                        "(source=${ConfigStore.lastReadSource}) -> PASS until configured"
                 } else {
                     "config at install: enabled=${atInstall.enabled} " +
                         "mode=${atInstall.mode} pkg=${atInstall.pkg} " +
-                        "act=${atInstall.activity}"
+                        "act=${atInstall.activity} " +
+                        "(source=${ConfigStore.lastReadSource})"
                 }
             )
         } catch (t: Throwable) {
             diag("install FAILED: ${t.javaClass.name}: ${t.message}")
+        }
+    }
+
+    /**
+     * 安装时刻取宿主进程的 Application 作 Context（读
+     * Settings.Global 用）：handleLoadPackage 阶段
+     * currentApplication 可能还没就绪，取不到返回 null，
+     * 调用方按无 Context 处理（只走文件通道）。
+     */
+    private fun hostContext(): Context? {
+        return try {
+            val clazz = Class.forName("android.app.ActivityThread")
+            val method = clazz.getMethod("currentApplication")
+            method.invoke(null) as? Context
+        } catch (t: Throwable) {
+            null
         }
     }
 
@@ -174,19 +198,26 @@ class QuickGestureHook : IXposedHookLoadPackage {
             diag("$source PASS: from_tag=$fromTag (not gesture)")
             return false
         }
-        val config = ConfigStore.readConfig()
+        val config = ConfigStore.readConfig(activity)
         if (config == null) {
-            diag("$source HIT gesture but config unreadable -> PASS")
+            diag(
+                "$source HIT gesture but config unreadable " +
+                    "(source=${ConfigStore.lastReadSource}) -> PASS"
+            )
             return false
         }
         if (!config.enabled) {
-            diag("$source HIT gesture, enabled=0 -> PASS")
+            diag(
+                "$source HIT gesture, enabled=0 " +
+                    "(source=${ConfigStore.lastReadSource}) -> PASS"
+            )
             return false
         }
         if (!config.isConfigured) {
             diag(
                 "$source HIT gesture, target not configured " +
-                    "(mode=${config.mode} pkg=${config.pkg}) -> PASS"
+                    "(mode=${config.mode} pkg=${config.pkg}, " +
+                    "source=${ConfigStore.lastReadSource}) -> PASS"
             )
             return false
         }

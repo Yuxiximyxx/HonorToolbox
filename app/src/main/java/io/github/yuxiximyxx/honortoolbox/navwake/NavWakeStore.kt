@@ -1,5 +1,7 @@
 package io.github.yuxiximyxx.honortoolbox.navwake
 
+import android.content.ContentResolver
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.content.SharedPreferences
@@ -61,14 +63,56 @@ object NavWakeStore {
         return ok
     }
 
+    /** 候选文件名：正本与 MediaStore 改名产生的「navwake (n).txt」副本。 */
+    private val CANDIDATE_NAME = Regex("""navwake( \(\d+\))?\.txt""")
+
+    /**
+     * 删尽目录下全部同名候选（v1.6.4）：旧实现用
+     * 「RELATIVE_PATH = 'Download/HonorToolbox' 且
+     * DISPLAY_NAME = 'navwake.txt'」整批删除——RELATIVE_PATH
+     * 入库带尾斜杠、等值查不中，且精确名匹配不到 (n) 副本，
+     * 实际一份都没删掉；随后每次 insert 都被系统改名成新
+     * 副本，真机目录里堆到 (7)、正本停在旧内容（LSPosed
+     * 日志实证 hook 恒读旧配置）。现改为先查出全部候选条目
+     * （名字 LIKE 粗筛 + 正则整名校验 + 目录归属校验），再
+     * 逐 Uri 删除。
+     */
+    private fun deleteAllCandidates(resolver: ContentResolver, collection: Uri) {
+        val uris = ArrayList<Uri>()
+        runCatching {
+            resolver.query(
+                collection,
+                arrayOf(
+                    MediaStore.MediaColumns._ID,
+                    MediaStore.MediaColumns.DISPLAY_NAME,
+                    MediaStore.MediaColumns.RELATIVE_PATH,
+                ),
+                "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?",
+                arrayOf("navwake%"),
+                null,
+            )?.use { cursor ->
+                val idIdx = cursor.getColumnIndex(MediaStore.MediaColumns._ID)
+                val nameIdx = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+                val relIdx = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
+                while (cursor.moveToNext()) {
+                    val name = cursor.getString(nameIdx) ?: continue
+                    val rel = cursor.getString(relIdx) ?: continue
+                    if (rel.trim('/') != RELATIVE_PATH) continue
+                    if (!CANDIDATE_NAME.matches(name)) continue
+                    uris.add(ContentUris.withAppendedId(collection, cursor.getLong(idIdx)))
+                }
+            }
+        }
+        for (uri in uris) {
+            runCatching { resolver.delete(uri, null, null) }
+        }
+    }
+
     private fun writeFile(context: Context, text: String): Boolean {
         val resolver = context.contentResolver
         val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
-        val selection = "${MediaStore.MediaColumns.RELATIVE_PATH} = ? AND " +
-            "${MediaStore.MediaColumns.DISPLAY_NAME} = ?"
-        val args = arrayOf(RELATIVE_PATH, NavConfig.FILE_NAME)
-        // 先删尽同名候选，保证只剩自己即将写的这一份
-        runCatching { resolver.delete(collection, selection, args) }
+        // 先删尽全部同名候选（含 (n) 副本），保证只剩自己即将写的这一份
+        deleteAllCandidates(resolver, collection)
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, NavConfig.FILE_NAME)
             put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")

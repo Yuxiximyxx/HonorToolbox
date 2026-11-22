@@ -5,6 +5,8 @@ import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.provider.MediaStore
+import android.provider.Settings
+import android.util.Log
 import java.io.File
 
 /**
@@ -30,6 +32,17 @@ import java.io.File
  * 取 mtime 最新的一份解析——两侧合力保证读到的就是最新写入。
  * 读不到/解析失败一律按「未配置」处理，hook 侧放行快服务原
  * 行为，绝不因配置问题拦住手势。
+ *
+ * Settings.Global 通道（v1.6.4 新增）：真机 LSPosed 日志
+ * 实证——文件本身存在且内容正确，但快服务进程没有直读
+ * /sdcard/Download 的权限，hook 侧目录扫描拿不到任何候选
+ * （同文件在 SystemUI 里可读）。故设置侧每次文件写成功后
+ * 把同一份格式化文本同步写入 Settings.Global 的
+ * [GLOBAL_KEY] 键（与 MagicPods 的 Settings.Global 跨进程
+ * 桥同模式，读它不需要存储权限）；hook 侧 [readConfig]
+ * 先读该键、像本格式的文本就解析采用，读不到再回退文件
+ * 候选扫描。每次读取实际走的通道记在 [lastReadSource]，
+ * hook 的 diag 日志会带出来，下轮取证可直接分辨。
  */
 data class GestureConfig(
     val enabled: Boolean = false,
@@ -89,12 +102,49 @@ object ConfigStore {
         return GestureConfig(enabled, mode, pkg, activity)
     }
 
+    /** Settings.Global 通道键名（honortoolbox_ 前缀，本功能专用）。 */
+    const val GLOBAL_KEY = "honortoolbox_quickgesture_config"
+
     /**
-     * hook 侧读取（普通文件 IO）：正本与全部「config (n).txt」
+     * 最近一次 [readConfig] 实际命中的通道："global" /
+     * "file" / "none"。hook 侧 diag 日志据此留痕。
+     */
+    @Volatile
+    var lastReadSource: String = "none"
+        private set
+
+    /**
+     * hook 侧读取：先 Settings.Global（[context] 非空时），
+     * 读到形如本格式（含 enabled= 行）的文本即解析采用；
+     * 否则回退文件候选扫描。[context] 为 null 时直接走文件
+     * 通道（安装时拿不到宿主 Context 的场合）。
+     */
+    fun readConfig(context: Context?): GestureConfig? {
+        if (context != null) {
+            val fromGlobal = try {
+                Settings.Global.getString(context.contentResolver, GLOBAL_KEY)
+            } catch (t: Throwable) {
+                null
+            }
+            if (!fromGlobal.isNullOrBlank() && fromGlobal.contains("enabled=")) {
+                lastReadSource = "global"
+                return parse(fromGlobal)
+            }
+        }
+        val fromFile = readConfigFromFile()
+        lastReadSource = if (fromFile != null) "file" else "none"
+        return fromFile
+    }
+
+    /** 无 Context 的兼容入口（等价 readConfig(null)，只走文件通道）。 */
+    fun readConfig(): GestureConfig? = readConfig(null)
+
+    /**
+     * 文件通道读取（普通文件 IO）：正本与全部「config (n).txt」
      * 副本都是候选，取 mtime 最新的一份。无任何可读候选返回
      * null（调用方按未配置放行）。
      */
-    fun readConfig(): GestureConfig? {
+    private fun readConfigFromFile(): GestureConfig? {
         val files = try {
             BASE_DIR.listFiles() ?: emptyArray()
         } catch (t: Throwable) {
@@ -128,13 +178,50 @@ object ConfigWriter {
      * 写入配置（调用方需在 IO 线程执行）；返回是否经回读校验
      * 确认落盘。口径：先删尽本安装拥有的全部 config 候选，
      * 再写一份（落盘名仍可能被改成副本，但自有候选只剩这一
-     * 份），最后回读校验内容一致才算成功。
+     * 份），最后回读校验内容一致才算成功。文件通道成功后再
+     * 同步 Settings.Global（见 [syncGlobal]），其成败不影响
+     * 本返回值（文件通道的结果呈现口径不变）。
      */
     fun writeConfig(context: Context, config: GestureConfig): Boolean {
         val bytes = ConfigStore.format(config).toByteArray(Charsets.UTF_8)
         deleteOwnCandidates(context)
         if (!writeFile(context, ConfigStore.CONFIG_NAME, bytes)) return false
-        return verifyOwnContent(context, bytes)
+        val ok = verifyOwnContent(context, bytes)
+        if (ok) syncGlobal(context, config)
+        return ok
+    }
+
+    private const val TAG = "QuickGestureStore"
+
+    /** 最近一次 Settings.Global 同步结果（null = 还没同步过）。 */
+    @Volatile
+    var lastGlobalSyncOk: Boolean? = null
+        private set
+
+    /**
+     * 把同一份格式化配置文本同步写入 Settings.Global 的
+     * [ConfigStore.GLOBAL_KEY] 键（v1.6.4）：快服务进程读
+     * 不到 Download 文件、但读 Global 不需要存储权限（与
+     * MagicPods 的 Settings.Global 跨进程桥同模式）。同步
+     * 失败只留痕（logcat + [lastGlobalSyncOk]），不影响文件
+     * 通道已成功的结果。
+     */
+    private fun syncGlobal(context: Context, config: GestureConfig) {
+        val text = ConfigStore.format(config)
+        val result = runCatching {
+            Settings.Global.putString(
+                context.contentResolver, ConfigStore.GLOBAL_KEY, text,
+            )
+        }
+        val ok = result.getOrDefault(false)
+        lastGlobalSyncOk = ok
+        if (!ok) {
+            Log.w(
+                TAG,
+                "Settings.Global 同步未成功（文件通道已落盘，hook 侧仍可走文件）",
+                result.exceptionOrNull(),
+            )
+        }
     }
 
     private fun ownCandidates(context: Context): List<Uri> {

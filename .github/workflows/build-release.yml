@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.6.3-release.apk
+          cp "$SRC" dist/HonorToolbox-1.6.4-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.6.3-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.6.4-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,45 +66,52 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.6.3
-          name: 荣耀工具箱 1.6.3
+          tag_name: v1.6.4
+          name: 荣耀工具箱 1.6.4
           body: |
-            ## 荣耀工具箱 1.6.3（作用域页隐藏无效行 + 全应用沉浸补齐）
+            ## 荣耀工具箱 1.6.4（修两条配置通道：长按唤醒读旧配置 / 快服务读不到配置）
 
-            **一、全部作用域页隐藏无效行（小乐点名）**
-            首页「全部作用域」页里，
-            - 未安装的宿主行（如 com.hihonor.systemui）
-            - 标注「仅探针模式」的宿主行（如
-              com.hihonor.magicvoice、com.hihonor.brain）
-            直接不显示；分组与「全选本组」的计数也随之不含
-            这些行，整组无行时整组不显示。已安装且正常功能
-            的宿主行、分组结构、勾选与重启逻辑一律未动。
+            两条根因都由小乐导出的 LSPosed 日志实证，只修
+            这两条，其余功能（掌盟等）一律未动。
 
-            **二、系统导航条沉浸补齐（小乐真机反馈）**
-            现象：首页与各子页手势条区域是一条不透明黑带、
-            内容没延伸到导航条之下。全应用窗口审计结论：
-            - MainActivity（首页与全部子页都在它里面）：
-              v1.2.3 已有 enableEdgeToEdge + 透明栏色，唯独
-              没关系统「对比度强制」——强制开着时系统会在
-              手势条区域压一条黑带。本版补上
-              isNavigationBarContrastEnforced /
-              isStatusBarContrastEnforced = false。
-            - 两副耳机的详情页（独立 Activity）：原先根本
-              没开 edge-to-edge，导航条还写实色（Free4 页
-              按主题写黑/浅灰、XM4 页写死黑色）。本版统一
-              改为内容铺到物理底边 + 导航条全透明 + 关
-              对比度强制，页面背景延伸到手势条之下。
-            - 长按唤醒的选择框（ChooserActivity）：主题
-              本就是透明栏，只补关对比度强制，与全应用
-              口径统一。
+            **一、长按导航条唤醒：hook 一直读 11-21 的旧配置**
+            设置侧经 MediaStore 写 navwake.txt 时，删除旧
+            文件的步骤实际没删掉（相对路径等值查不中、精确
+            文件名也匹配不到改名副本），每写一次就多一份
+            「navwake (n).txt」（真机已堆到 (7)），正本停在
+            旧内容（总开关开着、但默认目标与已选应用为空）；
+            而 hook 侧只读正本，于是每次长按都判「没目标、
+            放行」继续唤 YOYO。本版双修：
+            - 写侧：删除步改成真删——先查出目录下全部同名
+              候选（含 (n) 副本）逐个删除，再写新的一份，
+              副本不再堆积、正本即最新；
+            - 读侧：候选口径与仓内其余落盘通道对齐——扫
+              目录下全部 navwake (n).txt、取修改时间最新
+              一份解析，存量副本里的最新配置也能被读到。
 
-            其余功能、hook、配置均未改动。
+            **二、快服务手势改向：hook 在快服务进程里读不到配置**
+            配置文件本身存在且内容正确，但快服务进程没有
+            直读 /sdcard/Download 的权限，hook 侧目录扫描
+            拿不到任何候选（同一文件在系统界面进程里可
+            读），安装行与每次斜滑命中都只能报「配置读不
+            到、放行」。本版给 hook 侧加一条不需要存储权
+            限的通道（与耳机功能的 Settings.Global 跨进程
+            桥同模式）：
+            - 设置侧每次文件写成功后，把同一份配置同步
+              写入 Settings.Global 键
+              honortoolbox_quickgesture_config（同步失败
+              只留痕、不影响文件通道结果）；
+            - hook 侧先读该键、解析成功就用，读不到再
+              回退原来的文件候选扫描；判定逻辑零改动；
+            - 安装行与命中行日志带上配置来源
+              （global/file/none），下轮可直接分辨。
 
-            **复验点**：① 打开首页 →「全部作用域」，手势与
-            唤醒组应只剩荣耀快服务、系统用户界面两行，其余
-            分组行数不变、勾选与「重启选中」照常可用；
-            ② 首页、子页与两副耳机详情页底部，手势条区域
-            应能看到页面内容/背景延伸下去，不再有不透明
-            黑带。
+            **复验点**：① 长按唤醒：改一次目标保存 → 用
+            首页「重启系统界面」→ 长按导航条应直达所选
+            应用；② 快服务改向：保存配置 → 强停快服务
+            → 底角斜滑应直达荣耀搜索主页；③ 若仍不行，
+            把 LSPosed 日志再导一份：长按唤醒安装行应显
+            示默认目标已设、快服务安装行应带
+            source=global。
 
           files: dist/*.apk
