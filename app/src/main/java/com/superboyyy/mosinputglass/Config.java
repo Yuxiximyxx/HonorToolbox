@@ -155,7 +155,7 @@ public final class Config {
 
     /** 预设：名字 -> 覆盖的参数（没写的取默认值）。 */
     public static final Map<String, Map<String, String>> PRESETS = new LinkedHashMap<>();
-    public static {
+    static {
         PRESETS.put("iOS 风格（默认）", map());
         PRESETS.put("高可读", map(BG_ALPHA, "0.78", BLUR, "90", SAT, "1.2", REFRACTION, "0.15"));
         PRESETS.put("更通透", map(BG_ALPHA, "0.25", KEY_ALPHA, "0.75", BLUR, "40", SAT, "1.3"));
