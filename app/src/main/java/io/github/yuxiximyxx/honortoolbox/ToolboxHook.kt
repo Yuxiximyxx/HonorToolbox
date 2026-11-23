@@ -15,6 +15,7 @@ import io.github.yuxiximyxx.honortoolbox.nighticon.NightIconHook
 import io.github.yuxiximyxx.honortoolbox.palmpurify.PalmPurifyHook
 import io.github.yuxiximyxx.honortoolbox.quickgesture.QuickGestureHook
 import io.github.yuxiximyxx.honortoolbox.shadeclock.ShadeClockHook
+import io.github.yuxiximyxx.honortoolbox.wetypeglass.WetypeGlassHook
 
 /**
  * 荣耀工具箱统一入口（传统 Xposed API）：按宿主包名把
@@ -44,6 +45,10 @@ import io.github.yuxiximyxx.honortoolbox.shadeclock.ShadeClockHook
  *   YukiHook 声明式 hook 经适配层译成传统 API、各功能开关
  *   即门控不经 FeatureGate，配置走 Provider 直供，见
  *   betterheybox/BetterHeyboxHook）。
+ * - com.tencent.wetype / com.bytedance.android.doubaoime：
+ *   输入法玻璃（MOS液态输入，v1.8.0 合入；libxposed 现代 API
+ *   经适配层译成传统 API、总开关即门控，配置走 Provider
+ *   直供，见 wetypeglass/WetypeGlassHook）。
  */
 class ToolboxHook : IXposedHookLoadPackage, IXposedHookInitPackageResources {
 
@@ -126,6 +131,13 @@ class ToolboxHook : IXposedHookLoadPackage, IXposedHookInitPackageResources {
                 // 在小黑盒全部进程装载（与原 Yuki 入口同口径），
                 // 开关即门控、配置 Provider 现读，见 BetterHeyboxHook。
                 BetterHeyboxHook.install(lpparam)
+            }
+            "com.tencent.wetype",
+            "com.bytedance.android.doubaoime" -> {
+                // 输入法玻璃（MOS液态输入合入，v1.8.0）：挂
+                // Application.onCreate 后经 Provider 快照做总
+                // 开关门控再装 hook，见 WetypeGlassHook。
+                WetypeGlassHook.install(lpparam)
             }
         }
         // 激活状态文件（v1.2.3）：分发到功能宿主并跑完该分支

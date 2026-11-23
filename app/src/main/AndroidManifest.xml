@@ -155,6 +155,14 @@
             android:authorities="io.github.yuxiximyxx.honortoolbox.betterheybox"
             android:exported="true" />
 
+        <!-- 输入法玻璃的配置 Provider（v1.8.0）：hook 进程
+             （微信/豆包输入法）经 call("getAll") 拉镜像配置，
+             authority 与其余三个错开。 -->
+        <provider
+            android:name=".wetypeglass.WetypeGlassConfigProvider"
+            android:authorities="io.github.yuxiximyxx.honortoolbox.wetypeglass"
+            android:exported="true" />
+
         <!-- Xposed Module 声明（传统 API） -->
         <meta-data
             android:name="xposedmodule"

@@ -31,6 +31,9 @@
         <item>com.tencent.qt.qtl</item>
         <!-- 小黑盒增强（BetterHeybox 合入，v1.7.0） -->
         <item>com.max.xiaoheihe</item>
+        <!-- 输入法玻璃（MOS液态输入合入，v1.8.0）：微信输入法 + 豆包输入法 -->
+        <item>com.tencent.wetype</item>
+        <item>com.bytedance.android.doubaoime</item>
     </string-array>
 
     <!-- 图标日夜切换（原 NightIcon 设置项文案，ni_ 前缀防冲突；

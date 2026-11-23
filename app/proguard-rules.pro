@@ -32,3 +32,10 @@
 -keep class com.highcapable.yukihookapi.** { *; }
 -keep class com.example.liquidglass.** { *; }
 -dontwarn com.example.liquidglass.**
+
+# MOS液态输入（v1.8.0 合入）：移植树（com.superboyyy.mosinputglass）
+# 整包保留——hook 逻辑在宿主进程被装载、大量反射访问宿主与系统
+# 玻璃类、且有包名前缀自检（ownerPrefix）；工具箱侧子包
+# （wetypeglass）含 Manifest 声明的 Provider，一并保留
+-keep class com.superboyyy.mosinputglass.** { *; }
+-keep class io.github.yuxiximyxx.honortoolbox.wetypeglass.** { *; }

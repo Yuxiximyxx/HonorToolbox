@@ -113,6 +113,7 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import io.github.yuxiximyxx.honortoolbox.libraryplus.HonorSearchScreen
 import io.github.yuxiximyxx.honortoolbox.libraryplus.LibraryPlusScreen
 import io.github.yuxiximyxx.honortoolbox.betterheybox.BetterHeyboxScreen
+import io.github.yuxiximyxx.honortoolbox.wetypeglass.WetypeGlassScreen
 import io.github.yuxiximyxx.honortoolbox.palmpurify.PalmPurifyScreen
 import io.github.yuxiximyxx.honortoolbox.magicpods.EarphoneDetailActivity
 import io.github.yuxiximyxx.honortoolbox.magicxm4.EarphoneDetailActivity as Xm4EarphoneDetailActivity
@@ -353,8 +354,8 @@ private enum class ToolboxTab { Home, System, Apps, Settings }
 /** 「系统」页内部页：分组总览 / 四个功能的完整设置子页。 */
 private enum class SystemPage { Root, QuickGesture, NavWake, Shade, NightIcon, LibraryPlus, HonorSearch }
 
-/** 「应用」页内部页：总览 / 掌盟净化（v1.6.0）/ 小黑盒增强（v1.7.0）设置子页。 */
-private enum class AppsPage { Root, PalmPurify, Heybox }
+/** 「应用」页内部页：总览 / 掌盟净化（v1.6.0）/ 小黑盒增强（v1.7.0）/ 输入法玻璃（v1.8.0）设置子页。 */
+private enum class AppsPage { Root, PalmPurify, Heybox, WetypeGlass }
 
 /** 首页内部页：总览 / 按功能分组的重启作用域页（v1.6.2）。 */
 private enum class HomePage { Root, ScopeRestart }
@@ -596,12 +597,17 @@ private fun ToolboxHost(
                     bottomInset = bottomInset,
                     onOpenPalmPurify = { appsPage = AppsPage.PalmPurify },
                     onOpenHeybox = { appsPage = AppsPage.Heybox },
+                    onOpenWetypeGlass = { appsPage = AppsPage.WetypeGlass },
                 )
                 AppsPage.PalmPurify -> PalmPurifyScreen(
                     onBack = { appsPage = AppsPage.Root },
                     bottomInset = bottomInset,
                 )
                 AppsPage.Heybox -> BetterHeyboxScreen(
+                    onBack = { appsPage = AppsPage.Root },
+                    bottomInset = bottomInset,
+                )
+                AppsPage.WetypeGlass -> WetypeGlassScreen(
                     onBack = { appsPage = AppsPage.Root },
                     bottomInset = bottomInset,
                 )
@@ -1546,8 +1552,8 @@ private data class ScopeGroup(val title: String, val hosts: List<ScopeHost>)
 
 /**
  * 分组与宿主全清单。数据源 = 清单里的 xposedscope 全量
- * 14 项去掉工具箱自身（自身包名只是激活自检标记、不是任何
- * 功能的 hook 宿主，不列），其余 13 个宿主按功能分组；同一
+ * 16 项去掉工具箱自身（自身包名只是激活自检标记、不是任何
+ * 功能的 hook 宿主，不列），其余 15 个宿主按功能分组；同一
  * 宿主被多个功能用时在各组里都列（药师同款做法）：
  * - 通知中心主题：systemui 本体 + launcher 只读探针
  *   （ShadeClockHook 的两个分发分支）；
@@ -1560,7 +1566,8 @@ private data class ScopeGroup(val title: String, val hosts: List<ScopeHost>)
  *   控制中心卡 + 蓝牙/耳机服务/SWS/控制中心四进程，与
  *   ToolboxHook 分发一致）；
  * - 应用增强：掌盟净化的 com.tencent.qt.qtl + 小黑盒增强的
- *   com.max.xiaoheihe（v1.7.0 起同组并列）。
+ *   com.max.xiaoheihe（v1.7.0 起同组并列）+ 输入法玻璃的
+ *   两个输入法（v1.8.0 起同组）。
  */
 private val SCOPE_GROUPS: List<ScopeGroup> = listOf(
     ScopeGroup(
@@ -1603,6 +1610,8 @@ private val SCOPE_GROUPS: List<ScopeGroup> = listOf(
         listOf(
             ScopeHost("com.tencent.qt.qtl", "掌盟净化"),
             ScopeHost("com.max.xiaoheihe", "小黑盒增强"),
+            ScopeHost("com.tencent.wetype", "输入法玻璃"),
+            ScopeHost("com.bytedance.android.doubaoime", "输入法玻璃"),
         ),
     ),
 )
@@ -2010,13 +2019,15 @@ private fun SystemScreen(
 /**
  * 应用页（v1.6.0 起有真内容）：给第三方应用做的增强放这里，
  * 按组排列、以后同类模块继续往下加组。第一组「应用增强」
- * 收掌盟净化（v1.6.0）与小黑盒增强（v1.7.0）的入口。
+ * 收掌盟净化（v1.6.0）、小黑盒增强（v1.7.0）与输入法玻璃
+ * （v1.8.0）的入口。
  */
 @Composable
 private fun AppsScreen(
     bottomInset: Dp,
     onOpenPalmPurify: () -> Unit,
     onOpenHeybox: () -> Unit,
+    onOpenWetypeGlass: () -> Unit,
 ) {
     Scaffold(
         containerColor = MiuixTheme.colorScheme.surface,
@@ -2050,6 +2061,11 @@ private fun AppsScreen(
                         title = "小黑盒增强",
                         summary = "给小黑盒去广告、内容过滤、液态玻璃底栏与动态推送",
                         onClick = onOpenHeybox,
+                    )
+                    SuperArrow(
+                        title = "输入法玻璃",
+                        summary = "给微信/豆包输入法的键盘换上系统液态玻璃（MOS液态输入）",
+                        onClick = onOpenWetypeGlass,
                     )
                 }
                 Card(

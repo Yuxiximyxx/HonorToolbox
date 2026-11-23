@@ -1,0 +1,26 @@
+荣耀工具箱（HonorToolbox）
+==========================
+
+本应用由多个模块合并而来，各来源的版权与许可证归属如下。
+
+MOS液态输入（输入法玻璃，v1.8.0 合入）
+------------------------------------
+Copyright 2026 熠寻（酷安@熠寻）
+原项目：https://github.com/superboyyy/mos-input-glass
+以 Apache License 2.0 发布（许可证全文见原仓库 LICENSE）。
+
+合入说明：原模块基于 libxposed 现代 API，合入时将入口、
+配置通道（LSPosed 远程配置）与 hook 注册改写为本应用的
+传统 Xposed API + ContentProvider 直供等价实现，玻璃效果
+逻辑本体未改动；原项目所带的 libxposed/service、
+libxposed/api 第三方代码未随合入带入（运行时改由 LSPosed
+提供的传统 API 承担）。
+
+本项目与荣耀（HONOR）、小米（Xiaomi）、OPPO、腾讯、字节
+跳动均无关联。MagicOS、荣耀、HONOR 是荣耀终端有限公司的
+商标；微信输入法、豆包输入法分别是其所有者的商标或产品
+名称。模块内置的荣耀圆环标识（res/drawable/wg_honor_ring.xml，
+原项目重新绘制的矢量图形）是荣耀终端有限公司的商标，仅
+用于在荣耀手机的键盘上显示，不代表荣耀对本项目的认可。
+小米、OPPO 标识为原项目代码内重新绘制的单色图形，同理
+仅用于对应机型键盘显示。

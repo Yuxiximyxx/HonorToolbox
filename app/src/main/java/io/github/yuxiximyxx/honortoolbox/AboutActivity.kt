@@ -85,7 +85,8 @@ internal fun AboutScreen(onBack: () -> Unit) {
                             "· MagicPods —— OPPO Enco Free4 设备中心\n" +
                             "· MagicXM4 —— 索尼 WH-1000XM4 设备中心\n" +
                             "· PalmPurify —— 掌盟净化\n" +
-                            "· BetterHeybox —— 小黑盒增强",
+                            "· BetterHeybox —— 小黑盒增强\n" +
+                            "· MOS液态输入 —— 输入法玻璃（作者 熠寻，Apache-2.0）",
                         fontSize = 13.sp,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
