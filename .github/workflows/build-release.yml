@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.7.3-release.apk
+          cp "$SRC" dist/HonorToolbox-1.7.4-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.7.3-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.7.4-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,72 +66,64 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.7.3
-          name: 荣耀工具箱 1.7.3
+          tag_name: v1.7.4
+          name: 荣耀工具箱 1.7.4
           body: |
-            ## 荣耀工具箱 1.7.3（小黑盒点帖子黑屏热修 / 一级页导航条沉浸 / 首页重启区去重）
+            ## 荣耀工具箱 1.7.4（关于页名单补全 / 去小黑盒版本警告弹窗 / 小黑盒首屏底栏沉浸）
 
-            ### 一、小黑盒增强：点帖子黑屏（热修三·构造器语义）
+            ### 一、关于页来源名单更新
 
-            v1.7.2 修掉了构造器 proceed 的无限递归，
-            小黑盒不再崩溃，但点开帖子仍黑屏、无崩溃
-            无报错。真机 A/B 已定分水岭：独立版
-            BetterHeybox 在小黑盒 1.3.402 上点帖子
-            正常打开，不是版本漂移，问题在合入适配层
-            对构造器 hook 的处理语义——
+            设置 → 关于的「来源」卡文案还停在第一
+            阶段：MagicPods / MagicXM4 / LibraryPlus
+            写着「下一阶段合入」，且完全没提后来合
+            入的 PalmPurify 与 BetterHeybox。本版改
+            为与现状一致的完整名单（九项逐行列出）：
+            HonorShadeClock——通知中心主题 /
+            QuickGesture——快服务手势改向 /
+            NavWake——长按导航条唤醒 /
+            NightIcon——图标日夜切换 /
+            LibraryPlus——资源库增强 /
+            MagicPods——OPPO Enco Free4 设备中心 /
+            MagicXM4——索尼 WH-1000XM4 设备中心 /
+            PalmPurify——掌盟净化 /
+            BetterHeybox——小黑盒增强。「下一阶段
+            合入」字样删除，排版与「原仓库保持不
+            变」措辞不变。
 
-            适配层把所有 hook 都实现成 before 回调里
-            给 param 设 result：对方法没问题，但对构
-            造器，设 result 会让框架跳过原构造体，应
-            用手里那个已分配实例的字段初始化被整个跳
-            过、成了空壳；同时 proceed 走
-            invokeOriginalMethod 时传的是 null，就算
-            造出新实例也是另一个对象，与应用要用的那
-            个无关。中招的是 HttpBridge 抓 HTTP 的
-            OkHttp 载体类构造器：空壳网络客户端让帖
-            子数据请求静默失败，页面永远加载不出来
-            （黑屏、无异常）。另两处构造器注册点（评
-            论分享面板的回复回调构造器、WebView 构造
-            器群）同病。
+            ### 二、去掉小黑盒的版本警告弹窗
 
-            本版按原版 YukiHook 的构造器语义修适配
-            层：before 回调对构造器只执行拦截体、不
-            设 result；proceed 改为把正在构造的那个
-            实例传给 invokeOriginalMethod，让原构造
-            体在同一实例上执行、返回值丢弃。方法 hook
-            的语义不变。
+            小黑盒版本已漂移到 1.3.402（模块标注支
+            持到 1.3.400），每次进入都会弹「Better-
+            Heybox 支持 Heybox 1.3.396 / … /
+            1.3.400，当前检测到 1.3.402」的悬浮提
+            示框。本版把这条提示的 UI 呈现（宿主底
+            部提示/Toast 兜底）整段去掉；版本检测
+            本身与模块日志里的同一行记录保留不动，
+            版本检测 Hook 的安装与防降级逻辑不受
+            影响。
 
-            ### 二、一级页面导航条沉浸
+            ### 三、小黑盒首次进入底栏不沉浸
 
-            窗口层早已 edge-to-edge、栏全透明、对比
-            度强制也关了，但各页 miuix Scaffold 的
-            contentWindowInsets 默认含 systemBars，
-            innerPadding 把整个内容视口抬到导航条上
-            方，屏幕底部留一条只有底色的死带、内容永
-            远滚不到物理底边——这就是连着三轮说的
-            「一级页没沉浸」的那条（二级详情页不受影
-            响、未动）。本版把 MainActivity 内五处
-            Scaffold 的 contentWindowInsets 一律清
-            零，顶部避让改由各页 TopAppBar 自身的默
-            认 insets 承担；背景与内容从此铺到物理底
-            边，列表内部原有的滚动留白保留不动。
+            现象：冷启动第一次进入小黑盒时底部导航
+            条不沉浸（有实色带），切换到其它页面后
+            才变沉浸。机制：全界面沉浸 Hook 原来只
+            在 Activity 的 onResume 与 onWindow-
+            FocusChanged(true) 两个点即时应用沉浸
+            标志；冷启动首个窗口应用后，宿主自己的
+            首帧初始化（底栏/皮肤等）又把窗口标志
+            覆写回去，切页时重新应用才保持住。本版
+            改为多点幂等补设：除原有两个即时应用点
+            外，再在 decorView attach 时、下一帧、
+            以及 350ms 后各补设一次同一套沉浸标志
+            （与掌盟沉浸控制器的多点重设做法对
+            齐）；沉浸应用本身幂等（原始窗口状态只
+            在首次捕获），重复补设无副作用。后续页
+            面原有行为不变，图片查看 Dialog 沉浸等
+            其它 fork 定制未动。
 
-            ### 三、首页重启区去重
-
-            原来四行里「重启长按导航条唤醒」与「重启
-            系统界面」是同一个动作、并列两行不直观。
-            本版按目标去重成三行：重启系统界面（通知
-            中心主题、长按唤醒的改动靠它生效）/ 重启
-            桌面（图标日夜切换、资源库桌面部分的改动
-            靠它生效）/ 强停快服务（快服务改向的改动
-            靠它生效）；「全部作用域」入口不变，其余
-            宿主的强停重开仍在那边。
-
-            **复验点**：① 强停重开小黑盒，点开帖子
-            应正常出内容，顺带打开帖子里的网页链接确
-            认 WebView 不回归；② 四栏主页与各子页底
-            部内容应铺到屏幕物理底边、最后一项能滚出
-            悬浮底栏遮挡，顶栏不与状态栏重叠；③ 首页
-            重启区应为三行 + 全部作用域入口。
+            **复验点**：① 关于页名单完整、无「下
+            一阶段合入」字样；② 冷启动进小黑盒不
+            再弹版本警告；③ 冷启动首屏底栏即沉
+            浸、不需切页。
 
           files: dist/*.apk

@@ -14,6 +14,8 @@ import com.better.heybox.MainModule
 import com.better.heybox.liquidglass.LiquidGlassInstaller
 import com.better.heybox.liquidglass.WindowImmersiveController
 import java.lang.reflect.Method
+import java.util.Collections
+import java.util.WeakHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 class GeneralHook(private val module: MainModule) {
@@ -49,6 +51,14 @@ class GeneralHook(private val module: MainModule) {
      * 布局顶坏了（顶部搜索框消失）。改为分级：类名像图片/媒体查看页的
      * 做全量，其余页面只做轻量沉浸（透明导航条、不动 inset）；
      * 窗口重新获得焦点时再补一次，防止页面自己重置窗口标志。
+     *
+     * 工具箱版补强（v1.7.4）：冷启动首个窗口在 onResume 即时应用后，
+     * 宿主自己的首帧初始化（底栏/皮肤等）会把窗口标志覆写回去，
+     * 表现为「第一次进入底栏有实色带、切个页面回来才沉浸」。故除
+     * onResume / onWindowFocusChanged(true) 的即时应用外，再排
+     * decorView attach、下一帧与 350ms 后三档幂等补设（与掌盟沉浸
+     * 控制器的多点重设做法对齐）；WindowImmersiveController 的
+     * apply 本身幂等（原始窗口状态只在首次捕获），重复应用无副作用。
      */
     private fun hookFullImmersive(cl: ClassLoader) {
         try {
@@ -57,7 +67,10 @@ class GeneralHook(private val module: MainModule) {
             module.hook(onResume).intercept { chain ->
                 val result = chain.proceed()
                 val activity = chain.instanceOrNull as? Activity
-                if (activity != null) applyImmersiveGraded(activity)
+                if (activity != null) {
+                    applyImmersiveGraded(activity)
+                    scheduleImmersiveReapply(activity)
+                }
                 result
             }
             val onFocus = activityClass.getDeclaredMethod(
@@ -69,6 +82,7 @@ class GeneralHook(private val module: MainModule) {
                 val hasFocus = chain.arg(0) as? Boolean
                 if (activity != null && hasFocus == true) {
                     applyImmersiveGraded(activity)
+                    scheduleImmersiveReapply(activity)
                 }
                 result
             }
@@ -88,6 +102,42 @@ class GeneralHook(private val module: MainModule) {
             LiquidGlassInstaller.applyImmersive(activity)
         } else {
             LiquidGlassInstaller.applyImmersiveLite(activity)
+        }
+    }
+
+    /** 已挂 attach 监听的 Activity（防重复注册，弱引用不留引用链）。 */
+    private val immersiveAttachHooked: MutableSet<Activity> =
+        Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<Activity, Boolean>()))
+
+    /** 给首窗排队补设沉浸：attach 时、下一帧、350ms 后各补一次。 */
+    private fun scheduleImmersiveReapply(activity: Activity) {
+        try {
+            val decor = activity.window?.decorView ?: return
+            if (immersiveAttachHooked.add(activity)) {
+                decor.addOnAttachStateChangeListener(object :
+                    View.OnAttachStateChangeListener {
+                    override fun onViewAttachedToWindow(v: View) {
+                        if (!activity.isFinishing && !activity.isDestroyed) {
+                            applyImmersiveGraded(activity)
+                        }
+                    }
+
+                    override fun onViewDetachedFromWindow(v: View) {
+                    }
+                })
+            }
+            decor.post {
+                if (!activity.isFinishing && !activity.isDestroyed) {
+                    applyImmersiveGraded(activity)
+                }
+            }
+            decor.postDelayed({
+                if (!activity.isFinishing && !activity.isDestroyed) {
+                    applyImmersiveGraded(activity)
+                }
+            }, 350L)
+        } catch (t: Throwable) {
+            module.logd(Log.WARN, MainModule.TAG, "沉浸补设排队失败", t)
         }
     }
 
@@ -207,13 +257,9 @@ class GeneralHook(private val module: MainModule) {
 
         val message = "BetterHeybox 支持 Heybox " +
                 MainModule.SUPPORTED_HEYBOX_VERSIONS.joinToString(" / ") + "，当前检测到 $version"
-        try {
-            val toastUtil = Class.forName("com.max.hbutils.utils.f", false, cl)
-            val showBottomHint = toastUtil.getDeclaredMethod("d", String::class.java)
-            showBottomHint.invoke(null, message)
-        } catch (t: Throwable) {
-            Toast.makeText(activity.applicationContext, message, Toast.LENGTH_LONG).show()
-        }
+        // 工具箱版定制：不再弹版本警告提示——小黑盒版本漂移是常态，
+        // 每次进入都弹一次悬浮提示纯属打扰（小乐 2026-11-23 点名去掉）。
+        // 版本检测与本条日志保留不动，hook 安装与防降级逻辑不受影响。
         module.logd(Log.WARN, MainModule.TAG, message)
     }
 

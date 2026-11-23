@@ -79,9 +79,13 @@ internal fun AboutScreen(onBack: () -> Unit) {
                         "本应用由以下自有模块合并而来（原仓库保持不变）：\n" +
                             "· HonorShadeClock —— 通知中心主题\n" +
                             "· QuickGesture —— 快服务手势改向\n" +
-                            "· NavWake —— 长按导航条唤醒改向\n" +
+                            "· NavWake —— 长按导航条唤醒\n" +
                             "· NightIcon —— 图标日夜切换\n" +
-                            "· MagicPods / MagicXM4 / LibraryPlus —— 耳机设备中心与资源库增强，下一阶段合入",
+                            "· LibraryPlus —— 资源库增强\n" +
+                            "· MagicPods —— OPPO Enco Free4 设备中心\n" +
+                            "· MagicXM4 —— 索尼 WH-1000XM4 设备中心\n" +
+                            "· PalmPurify —— 掌盟净化\n" +
+                            "· BetterHeybox —— 小黑盒增强",
                         fontSize = 13.sp,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
