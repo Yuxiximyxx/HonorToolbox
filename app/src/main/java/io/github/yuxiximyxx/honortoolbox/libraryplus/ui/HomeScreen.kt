@@ -14,6 +14,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import io.github.yuxiximyxx.honortoolbox.libraryplus.LpConfig
 import io.github.yuxiximyxx.honortoolbox.libraryplus.ScopeControl
@@ -54,6 +55,8 @@ fun HomeScreen(
                 title = "重启作用域",
                 summary = "将重启桌面、资源库和荣耀搜索，桌面会短暂黑屏。" + if (cfg.useRoot) "\n将先尝试 root。" else "",
                 onDismissRequest = { confirm = false },
+                // 弹窗自身底部 margin 抬过悬浮底栏（只动弹窗、不动页面与沉浸）
+                outsideMargin = DpSize(12.dp, LocalLpBottomInset.current + 12.dp),
             ) {
                 Row(Modifier.fillMaxWidth()) {
                     TextButton(text = "取消", onClick = { confirm = false }, modifier = Modifier.weight(1f))

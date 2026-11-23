@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superboyyy.mosinputglass.Config
@@ -105,6 +106,8 @@ internal fun WetypeGlassScreen(
                     show = resetAsk,
                     title = "恢复默认设置",
                     onDismissRequest = { resetAsk = false },
+                    // 弹窗自身底部 margin 抬过悬浮底栏（只动弹窗、不动页面与沉浸）
+                    outsideMargin = DpSize(12.dp, LocalLpBottomInset.current + 12.dp),
                 ) {
                     Text(
                         "恢复所有设置为默认值？",
@@ -276,6 +279,7 @@ internal fun WetypeGlassScreen(
                 Card(Modifier.padding(horizontal = 12.dp).fillMaxWidth()) {
                     WgSlider("微信下移", Config.COMPOSE_DY, 0f, 12f, 0.5f, "dp", tick)
                     WgSlider("豆包下移", Config.COMPOSE_DY_DOUBAO, -4f, 12f, 0.5f, "dp", tick)
+                    WgSlider("候选栏水平偏移", Config.CAND_X, -20f, 40f, 1f, "dp", tick)
                 }
             }
 
@@ -422,6 +426,8 @@ private fun WgColorDialog(
         show = req != null,
         title = req?.title ?: "",
         onDismissRequest = onDismiss,
+        // 弹窗自身底部 margin 抬过悬浮底栏（只动弹窗、不动页面与沉浸）
+        outsideMargin = DpSize(12.dp, LocalLpBottomInset.current + 12.dp),
     ) {
         if (req != null) {
             TextField(

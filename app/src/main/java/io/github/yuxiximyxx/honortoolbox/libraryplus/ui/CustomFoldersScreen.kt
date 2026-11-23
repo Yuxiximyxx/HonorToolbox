@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import io.github.yuxiximyxx.honortoolbox.libraryplus.Const
 import io.github.yuxiximyxx.honortoolbox.libraryplus.LpConfig
@@ -68,6 +69,8 @@ private fun FolderNameDialog(
         title = title,
         summary = error ?: "名称最多 ${Const.FOLDER_NAME_MAX} 个字，不能与已有分类重名",
         onDismissRequest = onDismiss,
+        // 弹窗自身底部 margin 抬过悬浮底栏（只动弹窗、不动页面与沉浸）
+        outsideMargin = DpSize(12.dp, LocalLpBottomInset.current + 12.dp),
     ) {
         TextField(
             value = text,
@@ -247,6 +250,8 @@ fun FolderDetailScreen(
                 title = "删除「${folder.name}」",
                 summary = if (count > 0) "其中的 $count 个应用会回到原来的系统分类。" else "该分类中没有应用。",
                 onDismissRequest = { deleting = false },
+                // 弹窗自身底部 margin 抬过悬浮底栏（只动弹窗、不动页面与沉浸）
+                outsideMargin = DpSize(12.dp, LocalLpBottomInset.current + 12.dp),
             ) {
                 Row(Modifier.fillMaxWidth()) {
                     TextButton(text = "取消", onClick = { deleting = false }, modifier = Modifier.weight(1f))

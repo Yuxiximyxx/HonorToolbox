@@ -761,7 +761,16 @@ public class Main {
                         return;
                     }
                     // 按键圆角：只改原本圆角较小的按键（候选栏的圆形按钮不动），键面和描边一起改
-                    if (keyRadiusPx > 0 && op.equals("drawRoundRect")) setKeyRadius(p.args, wh);
+                    // 候选栏本体（微信那条又矮的自绘条）里的高亮块例外（工具箱 v1.8.1）：它不是按键，
+                    // 圆角跟键盘面板对齐（面板圆角 tintRadius），不然贴在左缘的小圆角和面板大圆角对不上
+                    if (keyRadiusPx > 0 && op.equals("drawRoundRect")) {
+                        if (isWechat && tintRadius > 0 && ownerH > 0
+                                && ownerH < 80f * owner.getResources().getDisplayMetrics().density) {
+                            setCandRadius(p.args, wh);
+                        } else {
+                            setKeyRadius(p.args, wh);
+                        }
+                    }
                     // 微信的键面是不透明灰；豆包的键面是半透明白（字母键 #47FFFFFF、功能键 #14FFFFFF）
                     boolean keyFace = isWechat ? Color.alpha(c) == 255 : Color.alpha(c) > 0;
                     if (isFill && keyFace && isGray(c)) {
@@ -1131,6 +1140,17 @@ public class Main {
         a[ix + 1] = r;
     }
 
+    /** 候选栏高亮块的圆角（工具箱 v1.8.1）：和 setKeyRadius 同一套路，目标值换成键盘面板圆角。 */
+    private static void setCandRadius(Object[] a, float[] wh) {
+        int ix = a.length >= 4 && a[0] instanceof RectF ? 1 : a.length >= 7 ? 4 : -1;
+        if (ix < 0 || !(a[ix] instanceof Float) || !(a[ix + 1] instanceof Float)) return;
+        float rx = (Float) a[ix];
+        if (rx >= 40f) return;                                  // 原本就很圆（候选栏圆形按钮等）
+        float r = Math.min(tintRadius, Math.min(wh[0], wh[1]) / 2f);
+        a[ix] = r;
+        a[ix + 1] = r;
+    }
+
     private static Paint lastPaint(Object[] a) {
         for (int i = a.length - 1; i >= 0; i--) if (a[i] instanceof Paint) return (Paint) a[i];
         return null;
@@ -1334,7 +1354,9 @@ public class Main {
 
         // 拼音行（候选栏左上角的 HorizontalScrollView）紧贴键盘左上角，圆角后会露在外面 -> 按圆角往里收
         final float insetR = radiusPx, insetDy = Math.round(clamp(f(isWechat ? Config.COMPOSE_DY : Config.COMPOSE_DY_DOUBAO), -8f, 24f) * density);
-        insetCornerRows(inputView, glassView, insetR, insetDy, density);
+        // 候选栏水平偏移（工具箱 v1.8.1 新增）：0 = 与键盘面板左缘对齐（对齐基点同拼音行的圆角内收量）
+        final float candDx = Math.round(clamp(f(Config.CAND_X), -20f, 40f) * density);
+        insetCornerRows(inputView, glassView, insetR, insetDy, density, candDx);
         // 拼音行可能在键盘大小不变的情况下才出现（豆包：候选栏里从隐藏变成显示），所以每次布局后都再检查一次
         if (inputView != null) {
             final View iv = inputView, gv = glassView;
@@ -1342,7 +1364,7 @@ public class Main {
             android.view.ViewTreeObserver.OnGlobalLayoutListener old = cornerListeners.get(iv);
             if (old != null) iv.getViewTreeObserver().removeOnGlobalLayoutListener(old);
             android.view.ViewTreeObserver.OnGlobalLayoutListener l = () -> {
-                if (active) insetCornerRows(iv, gv, insetR, insetDy, d);
+                if (active) insetCornerRows(iv, gv, insetR, insetDy, d, candDx);
             };
             cornerListeners.put(iv, l);
             iv.getViewTreeObserver().addOnGlobalLayoutListener(l);
@@ -2022,7 +2044,7 @@ public class Main {
      * 行内自带约 18px 左边距，所以平移半径的 0.35 倍（22dp 圆角 ≈ 26px）就够，再多看起来太靠右。
      * 桌面搜索里没有圆角，只下移。
      */
-    private void insetCornerRows(View inputView, View glassView, float radiusPx, float dy, float density) {
+    private void insetCornerRows(View inputView, View glassView, float radiusPx, float dy, float density, float candDxPx) {
         if (inputView == null) return;
         List<View> rows = new ArrayList<>();
         // 判定范围：左边在圆角内（至少 16dp），顶边在 16dp 内（候选栏在拼音行下面约 22dp，不会被选中）
@@ -2036,7 +2058,60 @@ public class Main {
             for (WeakReference<View> r : insetViews) if (r.get() == v) { tracked = true; break; }
             if (!tracked) insetViews.add(new WeakReference<>(v));
         }
-        if (trace) log("corner rows inset " + dx + "," + dy + "px: " + rows.size());
+        // 候选栏本体（微信自绘条，工具箱 v1.8.1）：高亮块画在它自己的画布 x=0 处，
+        // 视图层唯一能动的杠杆是整条平移。平移量 = 和拼音行同一个对齐基点（圆角
+        // 内收量）+ 候选栏水平偏移（0 = 左缘与键盘面板对齐，默认 4dp = 对齐后略右移）
+        if (isWechat) {
+            View strip = findCandidateStrip(inputView, glassView, density);
+            if (strip != null) {
+                float sdx = dx + candDxPx;
+                if (strip.getTranslationX() != sdx) strip.setTranslationX(sdx);
+                boolean tracked = false;
+                for (WeakReference<View> r : insetViews) if (r.get() == strip) { tracked = true; break; }
+                if (!tracked) insetViews.add(new WeakReference<>(strip));
+            }
+        }
+        if (trace) log("corner rows inset " + dx + "," + dy + "px: " + rows.size() + " candDx=" + candDxPx);
+    }
+
+    /**
+     * 找微信的候选栏本体：输入法自绘视图里又矮又靠顶的那一条（键盘本体是整块
+     * 高视图、拼音行是框架的 HorizontalScrollView，都不算）。多条时取最靠顶的；
+     * 找不到返回 null（结构和预期不一样时什么都不动，不误伤）。
+     */
+    private View findCandidateStrip(View inputView, View glassView, float density) {
+        List<View> found = new ArrayList<>();
+        findCandidateStrip(inputView, glassView, density, found, 0);
+        View best = null;
+        float bestTop = Float.MAX_VALUE;
+        int[] a = new int[2], g = new int[2];
+        glassView.getLocationInWindow(g);
+        for (View v : found) {
+            v.getLocationInWindow(a);
+            float top = a[1] - g[1] - v.getTranslationY();
+            if (top < bestTop) { bestTop = top; best = v; }
+        }
+        return best;
+    }
+
+    private void findCandidateStrip(View v, View glassView, float density, List<View> out, int depth) {
+        if (depth > 20 || v.getVisibility() == View.GONE) return;
+        if (v.getClass().getName().startsWith(ownerPrefix)) {
+            int h = v.getHeight();
+            if (h >= Math.round(16f * density) && h <= Math.round(80f * density)) {
+                int[] a = new int[2], g = new int[2];
+                v.getLocationInWindow(a);
+                glassView.getLocationInWindow(g);
+                // 位置减去已有的平移量，否则平移过一次后就判断不到了（同 findCornerRows）
+                float left = a[0] - g[0] - v.getTranslationX();
+                float top = a[1] - g[1] - v.getTranslationY();
+                if (left < 16f * density && top < 72f * density) { out.add(v); return; }
+            }
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup gr = (ViewGroup) v;
+            for (int i = 0; i < gr.getChildCount(); i++) findCandidateStrip(gr.getChildAt(i), glassView, density, out, depth + 1);
+        }
     }
 
     private static void findCornerRows(View v, View glassView, float maxLeft, float maxTop, List<View> out, int depth) {

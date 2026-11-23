@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import com.better.heybox.App
 import com.better.heybox.GlassProvider
@@ -620,6 +621,8 @@ private fun HeyEditDialog(
         show = req != null,
         title = req?.title ?: "",
         onDismissRequest = onDismiss,
+        // 弹窗自身底部 margin 抬过悬浮底栏（只动弹窗、不动页面与沉浸）
+        outsideMargin = DpSize(12.dp, LocalLpBottomInset.current + 12.dp),
     ) {
         if (req != null) {
             TextField(
@@ -656,6 +659,8 @@ private fun HeyChoiceDialog(
         show = req != null,
         title = req?.title ?: "",
         onDismissRequest = onDismiss,
+        // 弹窗自身底部 margin 抬过悬浮底栏（只动弹窗、不动页面与沉浸）
+        outsideMargin = DpSize(12.dp, LocalLpBottomInset.current + 12.dp),
     ) {
         if (req != null) {
             Column(Modifier.fillMaxWidth()) {

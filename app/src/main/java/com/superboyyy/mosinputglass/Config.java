@@ -39,6 +39,9 @@ public final class Config {
     public static final String SEARCH_FILL = "searchfill"; // 桌面搜索里：与搜索框面板同色铺满、不要圆角
     public static final String COMPOSE_DY = "composedy";   // 左上角拼音（输入中字符）行往下移多少 dp（微信）
     public static final String COMPOSE_DY_DOUBAO = "composedy_db";   // 同上（豆包），可以是负数 = 往上
+    // 候选栏水平偏移 dp（微信，v1.8.1 工具箱新增）：0 = 候选栏左缘与键盘面板左缘对齐
+    //（对齐基点 = 拼音行同款的圆角内收量），正数再往右、负数再往左；默认 4 = 对齐后略右移
+    public static final String CAND_X = "candx";
     public static final String KEY_DARK = "keydark";       // 深色模式按键：白色叠加的不透明度 0..1（iOS 的 #454545 键）
     public static final String KEY_LIGHT = "keylight";     // 浅色模式白键的不透明度 0..1（1 = iOS 的纯白，越小越透）
     public static final String IME_WECHAT = "ime_wechat";  // 对微信输入法生效
@@ -138,6 +141,7 @@ public final class Config {
             SEARCH_FILL, "1",
             COMPOSE_DY, "2",
             COMPOSE_DY_DOUBAO, "0",
+            CAND_X, "4",
             KEY_LIGHT, "1",
             KEY_DARK, "0.16",
             VOICE, "1",
