@@ -19,8 +19,15 @@ import java.lang.reflect.Method
  * 方法经反射调用会再次进入 hook 分发、再次执行拦截体，拦截体里
  * 再 proceed 又反射调用，无限递归栈溢出、宿主进程当场死（v1.7.0
  * 小黑盒启动即崩就是死在这里，第一个中招的是 Application.onCreate
- * 的 hook）。构造器分支维持 newInstance：构造器 hook 的 proceed
- * 语义本来就是新建实例、不经分发。
+ * 的 hook）。
+ *
+ * 注意（v1.7.2 热修）：构造器分支同理——被 hook 的构造器经反射
+ * Constructor.newInstance 同样会再次进入 hook 分发，并非「不经
+ * 分发」。v1.7.1 当时把构造器分支留给反射，结果 HttpBridge 抓
+ * HTTP 的构造器 hook 在点开帖子加载数据、目标类被实例化时引爆
+ * 同样的无限递归（后台线程栈溢出、帖子数据回不来、点帖子黑屏）。
+ * invokeOriginalMethod 对 Constructor 成员即直通原构造、不经
+ * 分发，返回值即新实例，thisObject 传 null。
  */
 class HookChain internal constructor(
     private val member: Member,
@@ -47,10 +54,7 @@ class HookChain internal constructor(
         try {
             return when (val m = member) {
                 is Method -> XposedBridge.invokeOriginalMethod(m, instanceOrNull, useArgs)
-                is Constructor<*> -> {
-                    m.isAccessible = true
-                    m.newInstance(*useArgs)
-                }
+                is Constructor<*> -> XposedBridge.invokeOriginalMethod(m, null, useArgs)
                 else -> throw IllegalStateException("不支持的 Member 类型: $m")
             }
         } catch (e: InvocationTargetException) {

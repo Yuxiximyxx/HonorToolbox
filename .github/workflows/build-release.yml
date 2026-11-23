@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.7.1-release.apk
+          cp "$SRC" dist/HonorToolbox-1.7.2-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.7.1-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.7.2-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,32 +66,33 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.7.1
-          name: 荣耀工具箱 1.7.1
+          tag_name: v1.7.2
+          name: 荣耀工具箱 1.7.2
           body: |
-            ## 荣耀工具箱 1.7.1（热修：小黑盒启动即崩）
+            ## 荣耀工具箱 1.7.2（热修二：点帖子黑屏）
 
-            v1.7.0 合入的小黑盒增强在真机上会让小黑盒一
-            打开就死：BetterHeybox 适配层的 proceed（执行
-            原方法）用的是普通反射调用，被 hook 的方法经
-            反射会再次进入拦截、拦截体里再 proceed 又反射
-            调用，无限递归栈溢出，进程在第一个被 hook 的
-            Application.onCreate 上就当场死亡（LSPosed
-            日志实证：只打出一行安装日志便无后续、进程
-            反复重启）。独立版没事是因为原框架的 proceed
-            走原方法直通通道。
+            v1.7.1 修好了小黑盒启动即崩，但点开帖子仍
+            黑屏：小黑盒详细日志抓到完整堆栈——适配层
+            proceed 的构造器分支还留着普通反射
+            newInstance，而被 hook 的构造器经反射实例化
+            同样会再次进入 hook 分发、无限递归栈溢出。
+            中招的是 HttpBridge 抓 HTTP 的构造器 hook：
+            平时不触发，点开帖子加载数据、目标类被实例
+            化时才引爆，后台线程栈溢出、帖子数据永远回
+            不来，表现为黑屏。
 
-            本版把适配层 proceed 改走 XposedBridge 的
-            原方法直通通道（invokeOriginalMethod，绕开
-            hook 分发），并通读排查了适配层与合入树：其余
-            反射调用都是普通数据对象/工具方法调用、不带
-            proceed 语义，无同类问题。除此一处外与
-            v1.7.0 完全一致，其它功能未动。
+            本版把构造器分支也改走 XposedBridge 的原
+            方法直通通道（invokeOriginalMethod 对构造
+            器即直通原构造、返回值即新实例），并再扫了
+            一遍合入树：全树被 hook 的构造器只有三处注
+            册点、proceed 全经此通道；其余拦截体内的反
+            射实例化（图片 schema、LinearLayoutManager、
+            FormBody.Builder）都不是 hook 目标，不进分
+            发、无同类问题。除此一处外与 v1.7.1 完全
+            一致，其它功能未动。
 
-            **复验点**：装本版后 LSPosed 里确认工具箱对
-            小黑盒（com.max.xiaoheihe）作用域勾着（独立版
-            BetterHeybox 保持停用），强停并重开小黑盒：
-            应正常打开、小黑盒增强各项功能生效。若仍打
-            不开，再导一份 LSPosed 日志即可定位死点。
+            **复验点**：装本版后强停并重开小黑盒，点开
+            帖子应正常加载出内容；小黑盒详细日志里不应
+            再出现 StackOverflowError。
 
           files: dist/*.apk
