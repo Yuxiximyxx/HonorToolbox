@@ -26,8 +26,21 @@ import java.lang.reflect.Method
  * 分发」。v1.7.1 当时把构造器分支留给反射，结果 HttpBridge 抓
  * HTTP 的构造器 hook 在点开帖子加载数据、目标类被实例化时引爆
  * 同样的无限递归（后台线程栈溢出、帖子数据回不来、点帖子黑屏）。
- * invokeOriginalMethod 对 Constructor 成员即直通原构造、不经
- * 分发，返回值即新实例，thisObject 传 null。
+ * 故构造器分支也改走 invokeOriginalMethod 直通原构造。
+ *
+ * 注意（v1.7.3 热修）：构造器的语义与方法分开，切勿按方法口径
+ * 改回。方法 proceed 是「造出结果」：invokeOriginalMethod 传
+ * 实例、拿返回值，before 里再把拦截体返回值写进 param.result
+ * 作最终结果。构造器 proceed 是「在同一实例上执行原构造体」：
+ * 必须把 before 回调的 param.thisObject（正在构造的那个实例）
+ * 传给 invokeOriginalMethod，让原构造体就在这个实例上跑；
+ * 返回值无语义、直接丢弃。同时 before 里绝不能给构造器设
+ * param.result——那会让框架跳过原构造体。v1.7.2 两处都做错了
+ * （传 null + 设 result）：proceed 就算造出新实例也是另一个对
+ * 象，应用手里那个实例成了未初始化的空壳，HttpBridge 的
+ * OkHttp 载体类构造器中招后帖子数据请求静默失败、页面永远
+ * 加载不出来（黑屏、无崩溃无报错，真机 A/B 证实独立版正常、
+ * 是适配层语义差异而非版本漂移）。
  */
 class HookChain internal constructor(
     private val member: Member,
@@ -54,7 +67,13 @@ class HookChain internal constructor(
         try {
             return when (val m = member) {
                 is Method -> XposedBridge.invokeOriginalMethod(m, instanceOrNull, useArgs)
-                is Constructor<*> -> XposedBridge.invokeOriginalMethod(m, null, useArgs)
+                is Constructor<*> -> {
+                    // 在正在构造的同一实例（before 回调的
+                    // param.thisObject）上执行原构造体；
+                    // 返回值无语义，丢弃（见类头 v1.7.3 注）。
+                    XposedBridge.invokeOriginalMethod(m, instanceOrNull, useArgs)
+                    null
+                }
                 else -> throw IllegalStateException("不支持的 Member 类型: $m")
             }
         } catch (e: InvocationTargetException) {

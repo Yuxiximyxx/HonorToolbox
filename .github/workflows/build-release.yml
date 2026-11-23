@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.7.2-release.apk
+          cp "$SRC" dist/HonorToolbox-1.7.3-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.7.2-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.7.3-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,33 +66,42 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.7.2
-          name: 荣耀工具箱 1.7.2
+          tag_name: v1.7.3
+          name: 荣耀工具箱 1.7.3
           body: |
-            ## 荣耀工具箱 1.7.2（热修二：点帖子黑屏）
+            ## 荣耀工具箱 1.7.3（热修三：点帖子黑屏·构造器语义）
 
-            v1.7.1 修好了小黑盒启动即崩，但点开帖子仍
-            黑屏：小黑盒详细日志抓到完整堆栈——适配层
-            proceed 的构造器分支还留着普通反射
-            newInstance，而被 hook 的构造器经反射实例化
-            同样会再次进入 hook 分发、无限递归栈溢出。
-            中招的是 HttpBridge 抓 HTTP 的构造器 hook：
-            平时不触发，点开帖子加载数据、目标类被实例
-            化时才引爆，后台线程栈溢出、帖子数据永远回
-            不来，表现为黑屏。
+            v1.7.2 修掉了构造器 proceed 的无限递归，
+            小黑盒不再崩溃，但点开帖子仍黑屏、无崩溃
+            无报错。真机 A/B 已定分水岭：独立版
+            BetterHeybox 在小黑盒 1.3.402 上点帖子
+            正常打开，不是版本漂移，问题在合入适配层
+            对构造器 hook 的处理语义——
 
-            本版把构造器分支也改走 XposedBridge 的原
-            方法直通通道（invokeOriginalMethod 对构造
-            器即直通原构造、返回值即新实例），并再扫了
-            一遍合入树：全树被 hook 的构造器只有三处注
-            册点、proceed 全经此通道；其余拦截体内的反
-            射实例化（图片 schema、LinearLayoutManager、
-            FormBody.Builder）都不是 hook 目标，不进分
-            发、无同类问题。除此一处外与 v1.7.1 完全
-            一致，其它功能未动。
+            适配层把所有 hook 都实现成 before 回调里
+            给 param 设 result：对方法没问题，但对构
+            造器，设 result 会让框架跳过原构造体，应
+            用手里那个已分配实例的字段初始化被整个跳
+            过、成了空壳；同时 proceed 走
+            invokeOriginalMethod 时传的是 null，就算
+            造出新实例也是另一个对象，与应用要用的那
+            个无关。中招的是 HttpBridge 抓 HTTP 的
+            OkHttp 载体类构造器：空壳网络客户端让帖
+            子数据请求静默失败，页面永远加载不出来
+            （黑屏、无异常）。另两处构造器注册点（评
+            论分享面板的回复回调构造器、WebView 构造
+            器群）同病。
 
-            **复验点**：装本版后强停并重开小黑盒，点开
-            帖子应正常加载出内容；小黑盒详细日志里不应
-            再出现 StackOverflowError。
+            本版按原版 YukiHook 的构造器语义修适配
+            层：before 回调对构造器只执行拦截体、不
+            设 result；proceed 改为把正在构造的那个
+            实例传给 invokeOriginalMethod，让原构造
+            体在同一实例上执行、返回值丢弃。方法 hook
+            的语义不变，除此一处外与 v1.7.2 完全一
+            致，其它功能未动。
+
+            **复验点**：装本版后强停并重开小黑盒，点
+            开帖子应正常出内容；顺带打开帖子里的网页
+            链接，确认 WebView 页面不回归。
 
           files: dist/*.apk
