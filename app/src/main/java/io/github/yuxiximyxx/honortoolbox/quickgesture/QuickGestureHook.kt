@@ -49,8 +49,10 @@ import java.io.File
  * onUnbind 复位收尾（静态分析预判），残影与否待真机验。
  *
  * 放行口径（任何一条不满足都完整放行快服务原行为）：
- * from_tag 不是 "LauncherScroll"（正常点开快服务）、配置读
- * 不到/解析失败、总开关关、目标未配置、目标启动失败。
+ * from_tag 不是 "LauncherScroll"（正常点开快服务）、配置
+ * 三路皆空且缓存未建、延迟重试 Provider 仍失败（v1.8.2
+ * 兜底，见 ConfigStore 类注）、总开关关、目标未配置、
+ * 目标启动失败。
  * 诊断写 /sdcard/Download/HonorToolbox/quickgesture.log
  * （v1.6.2 起的主落点；旧路径 /sdcard/Download/
  * quickgesture_probe.log 继续双写）+ LSPosed 日志，前缀
@@ -164,9 +166,62 @@ class QuickGestureHook : IXposedHookLoadPackage {
                         "(source=${ConfigStore.lastReadSource})"
                 }
             )
+            // v1.8.2 种子读：handleLoadPackage 时刻宿主
+            // Application 多半还没就绪、自检读恒走文件通道
+            // 落空，缓存建不起来，新进程首击只能靠 400ms
+            // 重试硬扛。这里起后台线程在约 1s、3s 各补读
+            // 一次（此时 currentApplication 应已就绪），把
+            // 缓存提前预热好，首击直接命中缓存/正常通道。
+            // 取不到 Context 或读不到只 diag 留痕，不报错。
+            seedConfigCache()
         } catch (t: Throwable) {
             diag("install FAILED: ${t.javaClass.name}: ${t.message}")
         }
+    }
+
+    /**
+     * 种子读（v1.8.2）：安装完成后在后台线程里延迟约
+     * 1s、3s 各做一次带宿主 Context 的 [ConfigStore]
+     * 读取，成功即预热进程内配置缓存（readConfig 内部
+     * 收口），让新进程的首个手势不必赌 Provider 冷启动
+     * 时序。两次都试：1s 时宿主 Application 可能仍未
+     * 就绪，3s 作补枪；已建缓存时重读也只是刷新，无害。
+     * 全程异常吞掉，只 diag 记每次结果与来源。
+     */
+    private fun seedConfigCache() {
+        val worker = Thread {
+            for (delayMs in longArrayOf(1_000L, 3_000L)) {
+                try {
+                    Thread.sleep(delayMs)
+                } catch (t: Throwable) {
+                    return@Thread
+                }
+                try {
+                    val ctx = hostContext()
+                    if (ctx == null) {
+                        diag("config seed read @${delayMs}ms: no host context yet")
+                        continue
+                    }
+                    val seeded = ConfigStore.readConfig(ctx)
+                    diag(
+                        if (seeded == null) {
+                            "config seed read @${delayMs}ms: unreadable " +
+                                "(source=${ConfigStore.lastReadSource})"
+                        } else {
+                            "config seed read @${delayMs}ms: enabled=${seeded.enabled} " +
+                                "mode=${seeded.mode} pkg=${seeded.pkg} " +
+                                "act=${seeded.activity} " +
+                                "(source=${ConfigStore.lastReadSource})"
+                        }
+                    )
+                } catch (t: Throwable) {
+                    diag("config seed read @${delayMs}ms error: ${t.javaClass.name}: ${t.message}")
+                }
+            }
+        }
+        worker.isDaemon = true
+        worker.name = "QuickGestureSeed"
+        worker.start()
     }
 
     /**
@@ -200,7 +255,16 @@ class QuickGestureHook : IXposedHookLoadPackage {
             diag("$source PASS: from_tag=$fromTag (not gesture)")
             return false
         }
-        val config = ConfigStore.readConfig(activity)
+        var config = ConfigStore.readConfig(activity)
+        if (config == null) {
+            // v1.8.2 兜底：三路皆空且缓存也空，多半是新进程
+            // 首击撞上 Provider 冷启动——放行前延迟约
+            // 400ms 重读一次 Provider（命中时
+            // lastReadSource=provider(retry)），仍空才放行。
+            // readConfig 内部已有缓存兜底，能走到这里说明
+            // 缓存未建，故重试是最后一道。
+            config = ConfigStore.readConfigFromProviderRetry(activity)
+        }
         if (config == null) {
             diag(
                 "$source HIT gesture but config unreadable " +

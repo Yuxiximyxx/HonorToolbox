@@ -56,6 +56,22 @@ import java.io.File
  * 进程查询都不需要特殊权限。hook 侧 [readConfig] 读序：
  * Provider → Settings.Global（保留，万一将来授了权）→
  * 文件候选扫描（兜底）。
+ *
+ * 闲置后首击兜底（v1.8.2，真机日志定案）：失败样本全是
+ * 「HIT gesture but config unreadable (source=none)」，
+ * 且都落在快服务进程刚重启的首次手势上——新进程首击时
+ * Provider 通道冷启动未就绪（工具箱 Provider 进程未热），
+ * Global 从未写成功、文件通道又无读权限，三路皆空直接
+ * 放行；同进程约 10 秒后的手势无干预自愈。故 hook 侧加
+ * 三层兜底：①进程内缓存最后一次成功读到的配置，三路皆
+ * 空时先用缓存判定（来源记 cache）；②缓存也空时，手势
+ * 路径在放行前延迟约 400ms 重读一次 Provider（来源记
+ * provider(retry)），给冷启动留时间；③安装后由 hook 起
+ * 后台线程延迟种子读预热缓存（见 QuickGestureHook）。
+ * 缓存只存进程内，进程重启即清，靠种子读补。三路只要有
+ * 一路活着，读到的永远是最新配置，缓存只在全断时顶上——
+ * 代价是通道全断期间改设置（尤其关开关）不即时生效，
+ * 以「闲置首击不失效」的收益换，口径在此写明。
  */
 data class GestureConfig(
     val enabled: Boolean = false,
@@ -149,27 +165,47 @@ object ConfigStore {
 
     /**
      * 最近一次 [readConfig] 实际命中的通道："provider" /
-     * "global" / "file" / "none"。hook 侧 diag 日志据此留痕。
+     * "global" / "file" / "cache" / "provider(retry)" /
+     * "none"。hook 侧 diag 日志据此留痕。
      */
     @Volatile
     var lastReadSource: String = "none"
         private set
 
     /**
+     * 进程内最后一次成功读到的配置（v1.8.2 兜底层一）：
+     * 任一通道读成功即刷新；三路皆空时顶上。进程重启
+     * 即清，不落盘——冷进程靠种子读/首击重试补建。
+     */
+    @Volatile
+    private var lastGoodConfig: GestureConfig? = null
+
+    /** 记下一次成功读取并原样返回（供读序各分支统一收口）。 */
+    private fun remember(config: GestureConfig): GestureConfig {
+        lastGoodConfig = config
+        return config
+    }
+
+    /** 当前缓存（可能为 null）；仅供诊断与测试，不参与读序。 */
+    fun cachedConfig(): GestureConfig? = lastGoodConfig
+
+    /**
      * hook 侧读取（[context] 非空时）：依次走 Provider →
      * Settings.Global → 文件候选扫描，任一通道读到形如本
-     * 格式（含 enabled= 行）的文本即解析采用；全部失败返回
-     * null（调用方按未配置放行）。[context] 为 null 时直接
-     * 走文件通道（安装时拿不到宿主 Context 的场合）。
-     * Provider 查询是同步跨进程调用、只在安装自检与手势
-     * 命中时发生，异常一律吞掉回退下一通道，绝不阻塞判定。
+     * 格式（含 enabled= 行）的文本即解析采用并刷新缓存；
+     * 三路皆空时回退进程内缓存（来源记 cache），缓存也
+     * 空才返回 null（调用方按未配置放行）。[context] 为
+     * null 时直接走文件通道（安装时拿不到宿主 Context
+     * 的场合）。Provider 查询是同步跨进程调用、只在安装
+     * 自检与手势命中时发生，异常一律吞掉回退下一通道，
+     * 绝不阻塞判定。
      */
     fun readConfig(context: Context?): GestureConfig? {
         if (context != null) {
             val fromProvider = readConfigFromProvider(context)
             if (fromProvider != null) {
                 lastReadSource = "provider"
-                return fromProvider
+                return remember(fromProvider)
             }
             val fromGlobal = try {
                 Settings.Global.getString(context.contentResolver, GLOBAL_KEY)
@@ -178,12 +214,44 @@ object ConfigStore {
             }
             if (!fromGlobal.isNullOrBlank() && fromGlobal.contains("enabled=")) {
                 lastReadSource = "global"
-                return parse(fromGlobal)
+                return remember(parse(fromGlobal))
             }
         }
         val fromFile = readConfigFromFile()
-        lastReadSource = if (fromFile != null) "file" else "none"
-        return fromFile
+        if (fromFile != null) {
+            lastReadSource = "file"
+            return remember(fromFile)
+        }
+        val cached = lastGoodConfig
+        if (cached != null) {
+            lastReadSource = "cache"
+            return cached
+        }
+        lastReadSource = "none"
+        return null
+    }
+
+    /** 首击重试前给 Provider 进程冷启动留的时间（毫秒）。 */
+    private const val PROVIDER_RETRY_DELAY_MS = 400L
+
+    /**
+     * 兜底层二（v1.8.2）：三路皆空且缓存也空时（即
+     * [readConfig] 返回 null 的场合），延迟约 400ms 后
+     * 只重读一次 Provider 通道——新进程首击时工具箱
+     * Provider 进程多半正在被第一发 call 拉起，稍等再
+     * 读即中。读到即刷新缓存、来源记 provider(retry)；
+     * 仍失败返回 null、来源保持 none。只在手势路径调用
+     * （同步阻塞约 400ms，半秒级封顶），安装自检不走。
+     */
+    fun readConfigFromProviderRetry(context: Context): GestureConfig? {
+        try {
+            Thread.sleep(PROVIDER_RETRY_DELAY_MS)
+        } catch (t: Throwable) {
+            return null
+        }
+        val config = readConfigFromProvider(context) ?: return null
+        lastReadSource = "provider(retry)"
+        return remember(config)
     }
 
     /**
