@@ -2,7 +2,6 @@ package com.better.heybox
 
 import com.better.heybox.hooks.AIClickbaitChecker
 import com.better.heybox.hooks.GeneralHook
-import com.better.heybox.liquidglass.InWindowTipWatcher
 import com.better.heybox.task.MyPostIdCatcher
 import com.better.heybox.watch.WatchEngine
 import com.better.heybox.watch.WatchSeen
@@ -23,7 +22,6 @@ object ModuleResourceCleanup {
         release("视频下载") { VideoDownloadManager.shutdown() }
         release("发帖广播") { MyPostIdCatcher.unregister() }
         release("会话跟踪") { SessionGuard.shutdown() }
-        release("玻璃提示") { InWindowTipWatcher.stop() }
         release("通用提示") { GeneralHook.shutdown() }
         release("前台跟踪") { ForegroundTracker.shutdown() }
         release("模块实例") { MainModule.releaseCurrent() }

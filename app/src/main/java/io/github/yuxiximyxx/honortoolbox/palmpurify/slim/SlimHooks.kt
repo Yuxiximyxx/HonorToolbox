@@ -7,11 +7,9 @@ import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
-import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
 import io.github.yuxiximyxx.honortoolbox.palmpurify.ModulePrefs
-import io.github.yuxiximyxx.honortoolbox.palmpurify.PalmPrefs
 import io.github.yuxiximyxx.honortoolbox.palmpurify.XposedInterface
 import io.github.yuxiximyxx.honortoolbox.palmpurify.XposedModule
 import java.lang.reflect.Method
@@ -26,13 +24,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 object SlimHooks {
     private const val HOME = "com.tencent.zone.main.zm.GameHomeActivity"
-    private const val TAB_ROW = "tab_title_content"
-    private const val CENTER = "bottom_title_center_btn"
     private val installed = AtomicBoolean(false)
     private val hookedAdapters = Collections.synchronizedSet(mutableSetOf<String>())
-    private val tabStates = WeakHashMap<View, TabState>()
     private val itemStates = WeakHashMap<View, ItemState>()
-    private val centerStates = WeakHashMap<View, Int>()
     private val loggedModules = Collections.synchronizedSet(mutableSetOf<String>())
     private var module: XposedModule? = null
     private var shakeLogged = false
@@ -63,148 +57,9 @@ object SlimHooks {
 
     private fun applyHome(activity: Activity) {
         val decor = activity.window?.decorView ?: return
-        applyTabs(decor)
-        applyCenter(decor)
+        // v1.10.0：掌盟底栏归 LiquidTab 接管，这里不再套用
+        // 底栏精简/逐项显隐/隐藏加号，只保留首页运营模块精简。
         watchMainList(decor)
-    }
-
-    /**
-     * 底栏逐项自定义（v1.6.0 合入时按小乐追加需求改，原独立版
-     * 是单一精简：固定只留「首页/我的」）：
-     * - slim_tabbar 仍是这一组的总闸：关 = 整组不生效、逐项
-     *   全部恢复原样；
-     * - 总闸开时逐项按 [PalmPrefs] 的 `tab_show_<身份>` 显隐，
-     *   缺省与原精简结果一致（首页/我的显示、其余隐藏），
-     *   用户在设置页逐项勾选留哪些、藏哪些；
-     * - 均匀分布沿用宿主自己的机制：底栏行是 LinearLayout，
-     *   显示项一律 width=0、weight=1 等权瓜分整行宽度，隐藏
-     *   项 GONE 且 weight=0 不占位——藏掉任意几项，剩下的
-     *   自动等距铺满（只剩一项时它占满整行，不崩）；
-     * - 发现与精简解耦：每次处理到底栏，先把全部子项按顺序
-     *   记进落盘通道供设置页逐项列名，不管总闸开没开。
-     *
-     * v1.6.1 修复（小乐真机实证：五项只记到三项）：v1.6.0 以
-     * 「标签」（可见文字→contentDescription）为唯一身份，
-     * 文字与描述皆空的纯图标项标签为空——记录时被 filter
-     * 丢弃、套用时被 label.isEmpty() 跳过，永远进不了名单。
-     * 改稳定身份制（见 [tabIdentities]）：资源 id 条目名 →
-     * 可见文字 → contentDescription → 兜底「位置 N」，同名
-     * 追加序号去重，任何一项都不会因标签为空被丢弃；读值
-     * 走 [PalmPrefs.tabShow] 的旧键兼容读，小乐在 v1.6.0
-     * 已调的三项（首页/我的/加号）不失效。
-     */
-    private fun applyTabs(decor: View) {
-        val row = findByEntry(decor, TAB_ROW) as? ViewGroup ?: return
-        val slim = enabled(ModulePrefs.KEY_SLIM_TABBAR, ModulePrefs.DEFAULT_SLIM_TABBAR)
-        val identities = tabIdentities(row)
-        PalmPrefs.saveTabEntries(
-            identities.map {
-                PalmPrefs.TabEntry(
-                    identity = it.identity,
-                    title = it.title,
-                    legacyLabel = it.legacyLabel,
-                )
-            }
-        )
-        for (index in 0 until row.childCount) {
-            val child = row.getChildAt(index)
-            val ident = identities[index]
-            val params = child.layoutParams as? LinearLayout.LayoutParams
-            val saved = tabStates.getOrPut(child) {
-                TabState(
-                    visibility = child.visibility,
-                    width = params?.width ?: child.layoutParams?.width ?: ViewGroup.LayoutParams.WRAP_CONTENT,
-                    weight = params?.weight ?: 0f,
-                )
-            }
-            if (!slim) {
-                child.visibility = saved.visibility
-                params?.width = saved.width
-                params?.weight = saved.weight
-                if (params != null) {
-                    child.layoutParams = params
-                }
-                continue
-            }
-            val show = PalmPrefs.tabShow(
-                ident.identity,
-                ident.legacyLabel,
-                PalmPrefs.defaultTabShow(ident.title) ||
-                    PalmPrefs.defaultTabShow(ident.legacyLabel),
-            )
-            if (show) {
-                child.visibility = View.VISIBLE
-                params?.width = 0
-                params?.weight = 1f
-            } else {
-                child.visibility = View.GONE
-                params?.width = 0
-                params?.weight = 0f
-            }
-            if (params != null) {
-                child.layoutParams = params
-            }
-        }
-    }
-
-    /** 一个底栏项的稳定身份三元组（与 [PalmPrefs.TabEntry] 同构）。 */
-    private class TabIdentity(
-        val identity: String,
-        val title: String,
-        val legacyLabel: String,
-    )
-
-    /**
-     * 给底栏行每个子项算稳定身份：优先资源 id 条目名，其次
-     * 旧口径标签（可见文字→contentDescription），都为空时
-     * 兜底「位置 N」；同一行内重名追加「·2」「·3」去重。
-     * 显示名优先用旧标签（用户认得出），没有才用条目名/
-     * 位置兜底。顺序与布局一致、每次套用结果稳定。
-     */
-    private fun tabIdentities(row: ViewGroup): List<TabIdentity> {
-        val used = mutableSetOf<String>()
-        return (0 until row.childCount).map { index ->
-            val child = row.getChildAt(index)
-            val legacy = labelOf(child)
-            val entry = idEntryOf(child)
-            val fallback = "位置 ${index + 1}"
-            val base = when {
-                entry.isNotEmpty() -> entry
-                legacy.isNotEmpty() -> legacy
-                else -> fallback
-            }
-            var identity = base
-            var n = 2
-            while (!used.add(identity)) {
-                identity = "$base·$n"
-                n++
-            }
-            val title = when {
-                legacy.isNotEmpty() -> legacy
-                entry.isNotEmpty() -> entry
-                else -> fallback
-            }
-            TabIdentity(identity = identity, title = title, legacyLabel = legacy)
-        }
-    }
-
-    /** 资源 id 的条目名（如 tab_home）；无 id 或查不到返回空串。 */
-    private fun idEntryOf(view: View): String {
-        if (view.id == View.NO_ID) {
-            return ""
-        }
-        return try {
-            view.resources.getResourceEntryName(view.id)?.trim().orEmpty()
-        } catch (_: Throwable) {
-            ""
-        }
-    }
-
-    private fun applyCenter(decor: View) {
-        val button = findByEntry(decor, CENTER) ?: return
-        val hide = enabled(ModulePrefs.KEY_HIDE_CENTER_BTN, ModulePrefs.DEFAULT_HIDE_CENTER_BTN)
-        val original = centerStates.getOrPut(button) { button.visibility }
-        button.visibility = if (hide) View.GONE else original
     }
 
     private fun watchMainList(decor: View) {
@@ -442,17 +297,6 @@ object SlimHooks {
         view.visibility = saved.visibility
     }
 
-    private fun labelOf(view: View): String {
-        // 逐项开关的身份键：优先可见文字（与原精简的命中口径
-        // 一致），文字为空时退到 contentDescription；两处都
-        // trim，避免同一项在设置页和 hook 侧对不上。
-        val text = textOf(view, 40).trim()
-        if (text.isNotEmpty()) {
-            return text
-        }
-        return view.contentDescription?.toString()?.trim().orEmpty()
-    }
-
     private fun findBind(type: Class<*>): Method? {
         var current: Class<*>? = type
         while (current != null && !current.name.endsWith("RecyclerView\$Adapter")) {
@@ -651,7 +495,6 @@ object SlimHooks {
         }
     }
 
-    private class TabState(val visibility: Int, val width: Int, val weight: Float)
     private class ItemState(val height: Int, val visibility: Int)
     private class Decision(val type: String, val title: String, val action: String)
 }

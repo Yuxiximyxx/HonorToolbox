@@ -10,8 +10,6 @@ import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import com.better.heybox.hooks.AdFilterHook
-import com.better.heybox.hooks.BottomTabHook
-import com.better.heybox.hooks.BottomTabUpdateHook
 import com.better.heybox.hooks.BrowserRedirectHook
 import com.better.heybox.hooks.CommentCopyHook
 import com.better.heybox.hooks.CommentFilterHook
@@ -27,7 +25,6 @@ import com.better.heybox.hooks.GeneralHook
 import com.better.heybox.hooks.ImageCacheDirHook
 import com.better.heybox.hooks.ImageOriginalHook
 import com.better.heybox.hooks.ImageShareHook
-import com.better.heybox.hooks.LiquidGlassBottomBarHook
 import com.better.heybox.hooks.MessageRedDotHook
 import com.better.heybox.hooks.MyTaskHook
 import com.better.heybox.hooks.PostDetailCleanHook
@@ -46,7 +43,6 @@ import com.better.heybox.hooks.TextSelectHook
 import com.better.heybox.hooks.VideoDownloadHook
 import com.better.heybox.hooks.WatchHook
 import com.better.heybox.hooks.WebViewDevToolsHook
-import com.better.heybox.liquidglass.LiquidGlassHookBridge
 import com.highcapable.yukihookapi.hook.core.api.priority.YukiHookPriority
 import com.highcapable.yukihookapi.hook.log.YLog
 import com.highcapable.yukihookapi.hook.param.HookChain
@@ -245,7 +241,6 @@ class MainModule private constructor(private val param: PackageParam) {
         } catch (t: Throwable) {
             logv(TAG, "会话结算失败: $t")
         }
-        LiquidGlassHookBridge.setModule(this)
         Checkpoint.mark(">>> 开始安装 Hook")
         val t0 = SystemClock.elapsedRealtime()
 
@@ -261,11 +256,6 @@ class MainModule private constructor(private val param: PackageParam) {
             App.KEY_OPEN_SCREEN, App.KEY_FEED_AD, App.KEY_BUBBLE_AD, App.KEY_CORNER_AD)
         registerHook("设置入口", SettingsEntryHook(this)::install, cl)
         registerHook("扫一扫快捷方式", scanShortcutHook::install, cl)
-        registerHook("禁止底栏热更新", BottomTabUpdateHook(this)::install, cl, App.KEY_BLOCK_BOTTOM_TAB_UPDATE)
-        registerHook("底部导航", BottomTabHook(this)::install, cl,
-            App.KEY_HIDE_TAB_HOME, App.KEY_HIDE_TAB_HOT, App.KEY_HIDE_TAB_GAME, App.KEY_HIDE_ADD)
-        registerHook("液态玻璃底栏", LiquidGlassBottomBarHook(this)::install, cl,
-            App.KEY_LIQUID_GLASS, App.KEY_GLASS_IMMERSIVE)
         registerHook("推广贴", PromotePostHook(this)::install, cl, App.KEY_PROMOTE_AD)
         registerHook("首页广告横幅", FeedBannerHook(this)::install, cl, App.KEY_PROMOTE_AD)
         registerHook("发帖过滤", postFilter::install, cl,
@@ -613,10 +603,6 @@ class MainModule private constructor(private val param: PackageParam) {
             App.KEY_BUBBLE_AD,
             App.KEY_CORNER_AD,
             App.KEY_PROMOTE_AD,
-            App.KEY_HIDE_TAB_HOME,
-            App.KEY_HIDE_TAB_HOT,
-            App.KEY_HIDE_TAB_GAME,
-            App.KEY_HIDE_ADD,
             App.KEY_COPY_POST,
             App.KEY_CUSTOM_TEXT_SELECT,
             App.KEY_COMMENT_FREE_COPY,
@@ -676,31 +662,11 @@ class MainModule private constructor(private val param: PackageParam) {
             App.KEY_WEB_LOG_DATA,
             App.KEY_LOG,
             App.KEY_WEBVIEW_DEVTOOLS,
-            App.KEY_LIQUID_GLASS,
-            App.KEY_GLASS_IMMERSIVE,
-            App.KEY_GLASS_ADAPTIVE,
-            App.KEY_GLASS_DARK_COLOR,
-            App.KEY_GLASS_DARK_ALPHA,
-            App.KEY_GLASS_LIGHT_COLOR,
-            App.KEY_GLASS_LIGHT_ALPHA,
-            App.KEY_GLASS_BAR_HEIGHT,
-            App.KEY_GLASS_BAR_OFFSET,
-            App.KEY_GLASS_SIDE_MARGIN,
-            App.KEY_GLASS_FIT_TABS,
-            App.KEY_GLASS_BAR_WIDTH_MODE,
-            App.KEY_GLASS_BAR_WIDTH_PCT,
-            App.KEY_GLASS_TAB_WIDTH_PCT,
-            App.KEY_GLASS_BAR_LAYOUT,
-            App.KEY_GLASS_SEARCH_IN_BAR,
-            App.KEY_GLASS_PROVIDER,
             App.KEY_SINGLE_COLUMN_FEED,
             App.KEY_POST_MIN_LEVEL,
             App.KEY_POST_MIN_LIKE,
             App.KEY_POST_MIN_COMMENT,
             App.KEY_POST_MIN_FAVOUR,
-            App.KEY_GLASS_TAB_SELECT_COLOR,
-            App.KEY_GLASS_TAB_SELECT_ALPHA,
-            App.KEY_GLASS_TAB_ORDER,
             App.KEY_POST_FILTER_SKIP_SEARCH,
             App.KEY_POST_FILTER_SKIP_FOLLOW,
             App.KEY_IMAGE_AUTO_ORIGINAL,
@@ -740,8 +706,6 @@ class MainModule private constructor(private val param: PackageParam) {
             App.KEY_AI_TOKEN,
             App.KEY_AI_PROMPT,
             App.KEY_AI_MAX_TOKENS,
-            App.KEY_GLASS_DARK_PRESET,
-            App.KEY_GLASS_LIGHT_PRESET,
             App.KEY_WEBVIEW_ENTRY_URL,
             App.KEY_DISCLAIMER_ACCEPTED,
             App.KEY_MODULE_VERSION_FLOOR,

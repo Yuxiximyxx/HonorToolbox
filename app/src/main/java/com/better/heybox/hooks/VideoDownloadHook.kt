@@ -218,13 +218,6 @@ class VideoDownloadHook(private val module: MainModule) {
         private fun syncInternal() {
             ensureEntry()
             val e = entry
-            if (glassSettingsVisible) {
-                active = null
-                if (e != null && e.visibility != View.GONE) {
-                    e.visibility = View.GONE
-                }
-                return
-            }
             var chosen: Candidate? = null
             var chosenAnchor: View? = null
             val decorH = decor.height
@@ -1252,30 +1245,6 @@ class VideoDownloadHook(private val module: MainModule) {
     }
 
     companion object {
-
-        @Volatile
-        private var glassSettingsVisible = false
-
-        @JvmStatic
-        fun setGlassSettingsVisible(visible: Boolean) {
-            glassSettingsVisible = visible
-            val live = ArrayList<EntryController>()
-            synchronized(EntryController.CONTROLLERS) {
-                val it = EntryController.CONTROLLERS.entries.iterator()
-                while (it.hasNext()) {
-                    val ref = it.next().value
-                    val controller = ref?.get()
-                    if (controller == null) {
-                        it.remove()
-                        continue
-                    }
-                    live.add(controller)
-                }
-            }
-            for (controller in live) {
-                controller.sync()
-            }
-        }
 
         private val VIDEO_PAGE_HOSTS: Set<String> =
             java.util.HashSet(

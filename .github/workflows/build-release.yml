@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.9.0-release.apk
+          cp "$SRC" dist/HonorToolbox-1.10.0-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.9.0-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.10.0-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,64 +66,65 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.9.0
-          name: 荣耀工具箱 1.9.0
+          tag_name: v1.10.0
+          name: 荣耀工具箱 1.10.0
           body: |
-            ## 荣耀工具箱 1.9.0（合入 LockPanel 锁屏快捷面板）
+            ## 荣耀工具箱 1.10.0（应用底栏归 LiquidTab 统一接管）
 
-            ### 合入内容
+            ### 本版改动
 
-            把 LockPanel（作者 chaosz，「Magic OS 锁屏快捷
-            面板」v1.20）合进工具箱：接管锁屏底部快捷面板
-            （SystemUI 的 ToolBox/Magazine 锁屏体系）——控制
-            面板能否上划呼出（跟随系统 / 强制允许 / 强制
-            禁止）、隐藏「换壁纸 / 开启杂志锁屏」文字、5 个
-            快捷槽位的图标与点击动作替换（内置录音机 / 计
-            算器 / 手电筒 / 时钟 / 扫描与相机免解锁直开，
-            也可换成任意应用或指定 Activity）。
+            按定案把「应用」部分涉及应用自有底栏的功能全部
+            去除：掌盟与小黑盒的底栏今后由 LiquidTab 模块
+            统一控制，本模块不再触碰这两个应用的底栏。
 
-            原模块只有 APK、无公开源码，本版以反编译代码
-            为唯一依据移植：全部 hook 落点与逻辑零改（仅
-            两处 jadx 反编译伪影做了语义等价的最小修复，
-            见源码头注），13 个配置键的键名、默认值、取值
-            格式逐字不变。
+            ### 掌盟净化
 
-            ### 配置通道（按工具箱范式适配）
+            - 删除「底栏显示」整组设置：底栏精简总闸
+              （slim_tabbar）、逐项显示开关（tab_show_*）、
+              隐藏中间加号（hide_center_btn）。
+            - hook 侧同步停止：首页处理不再套用底栏逐项
+              显隐与等权铺满、不再隐藏中间加号、不再记录
+              底栏项名单；旧配置迁移也不再导入这两个键
+              （存量键值留在 prefs 里无害、不再被读取）。
+            - 保留不动：透明沉浸（系统导航条沉浸、非应用
+              底栏）、屏蔽开屏广告、首页运营模块精简、
+              弹窗拦截、摇一摇拦截、调试日志。
 
-            - Provider authority 改为
-              io.github.yuxiximyxx.honortoolbox.lockpanel，
-              数据源为工具箱镜像偏好 lockpanel_settings，
-              SystemUI 侧仍经 query + ContentObserver +
-              CFG_CHANGED 广播（action 改工具箱包名前缀）
-              拉取与感知变化，改动即时生效、无需重启。
-            - 原独立版配置**不迁移**：新子页首次打开按原
-              默认值整份播种。
-            - 作用域不变：宿主仍只有 com.android.systemui
-              （工具箱作用域总数仍为 17 项）。
+            ### 小黑盒增强
 
-            ### 设置界面
+            - 删除「液态玻璃」与「底部导航栏」两组设置：
+              工具箱子页与小黑盒软件内面板（两处共用同一
+              份设置定义）同步消失。
+            - hook 侧整套停止安装：液态玻璃底栏
+              （LiquidGlassBottomBarHook 与 liquidglass
+              整包实现）、底部导航隐藏（BottomTabHook）、
+              禁止底栏热更新（BottomTabUpdateHook）全部
+              移除，配置键（liquid_glass / glass_* /
+              hide_tab_* / hide_add /
+              block_bottom_tab_update）停止读取生效；
+              配置备份与镜像同步名单同步摘除这些键。
+            - 保留不动：广告过滤、发帖过滤、首页信息流、
+              评论过滤、搜索页精简、帖子详情精简、游戏库
+              精简、分享净化、收藏、复制、视频下载、截图、
+              每日任务、动态推送、通用等全部其他功能；
+              全界面系统导航条沉浸保留（改为常开、不再
+              依赖已删的 glass_immersive 键）。
 
-            「系统」页新增「锁屏」分组 →「锁屏快捷面板」
-            子页（MIUIX 重排，只动呈现）：总开关、面板可
-            用性三档、隐藏切换样式、5 个槽位行（点进二级
-            编辑：图标选择器带搜索与原厂图标目录、动作选
-            择器含内置动作 / 应用列表 / 指定 Activity 输
-            入）、恢复默认。原版的重启 SystemUI 按钮不另
-            造，复用首页既有入口。
+            ### 其他
 
-            ### 随带更新（小乐追加）
+            - 输入法玻璃（wetypeglass）与工具箱自身悬浮
+              底栏不受影响；启用功能计数与全部作用域页
+              不变（掌盟/小黑盒功能本体都还在，作用域
+              总数仍 17 项）。
+            - 随带清理：去掉只服务于小黑盒玻璃底栏的
+              外部玻璃库依赖（com.github.QWEA0:
+              liquidglass）。
 
-            - 首页「已启用功能」计数把锁屏快捷面板计入：
-              计数口径 4 → 5（分母同步改 5）。
-            - 「全部作用域」页新增「锁屏」分组，含
-              com.android.systemui「锁屏快捷面板」一行，
-              与通知中心主题、长按唤醒等 SystemUI 行并列，
-              批量重启按包名去重、SystemUI 仍只重启一次。
-
-            **复验点**：装 v1.9.0 后先停用独立版 LockPanel
-            （防双重 hook）；在新子页把某个槽位动作换成计
-            算器，锁屏划出面板点它验证；面板模式切「强制
-            禁止」应划不出面板；首页已启用功能数在打开锁
-            屏快捷面板总开关后应 +1。
+            **复验点**：装 v1.10.0 后，掌盟净化子页应只剩
+            界面/开屏/首页/弹窗/其他五组、小黑盒增强子页
+            与小黑盒软件内面板应不再出现「液态玻璃」与
+            「底部导航栏」；两个应用的底栏外观改在
+            LiquidTab 里控制（需 LiquidTab 的掌盟/小黑盒
+            适配版）。
 
           files: dist/*.apk

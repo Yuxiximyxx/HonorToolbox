@@ -2087,7 +2087,7 @@ private fun AppsScreen(
                     )
                     SuperArrow(
                         title = "小黑盒增强",
-                        summary = "给小黑盒去广告、内容过滤、液态玻璃底栏与动态推送",
+                        summary = "给小黑盒去广告、内容过滤与动态推送",
                         onClick = onOpenHeybox,
                     )
                     SuperArrow(

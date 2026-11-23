@@ -27,20 +27,6 @@ object ConfigBackup {
         App.KEY_MY_TASK_TEXT,
         App.KEY_MY_TASK_KEYWORDS,
         App.KEY_MY_TASK_MAX_PER_DAY,
-        App.KEY_GLASS_PROVIDER,
-        App.KEY_GLASS_DARK_COLOR,
-        App.KEY_GLASS_DARK_ALPHA,
-        App.KEY_GLASS_LIGHT_COLOR,
-        App.KEY_GLASS_LIGHT_ALPHA,
-        App.KEY_GLASS_BAR_HEIGHT,
-        App.KEY_GLASS_BAR_OFFSET,
-        App.KEY_GLASS_SIDE_MARGIN,
-        App.KEY_GLASS_BAR_WIDTH_MODE,
-        App.KEY_GLASS_BAR_WIDTH_PCT,
-        App.KEY_GLASS_TAB_WIDTH_PCT,
-        App.KEY_GLASS_BAR_LAYOUT,
-        App.KEY_GLASS_DARK_PRESET,
-        App.KEY_GLASS_LIGHT_PRESET,
         App.KEY_IMAGE_CACHE_DIR,
         App.KEY_POST_MIN_LEVEL,
         App.KEY_POST_MIN_LIKE,
@@ -77,11 +63,6 @@ object ConfigBackup {
     )
 
     private val RESTART_KEYS = arrayOf(
-        App.KEY_BLOCK_BOTTOM_TAB_UPDATE,
-        App.KEY_HIDE_TAB_HOME,
-        App.KEY_HIDE_TAB_HOT,
-        App.KEY_HIDE_TAB_GAME,
-        App.KEY_HIDE_ADD,
         App.KEY_IMAGE_CACHE_DIR
     )
 

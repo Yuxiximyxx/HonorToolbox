@@ -33,7 +33,6 @@ import com.better.heybox.Checkpoint
 import com.better.heybox.ConfigBackup
 import com.better.heybox.CommentPanelSettings
 import com.better.heybox.DexKitResolver
-import com.better.heybox.GlassProvider
 import com.better.heybox.HeyboxPrefs
 import com.better.heybox.HeyboxTargets
 import com.better.heybox.LogExport
@@ -43,8 +42,6 @@ import com.better.heybox.log.LogWriterStats
 import com.better.heybox.PreferenceReceiver
 import com.better.heybox.ThemeUtils
 import com.better.heybox.VersionUtils
-import com.better.heybox.liquidglass.GlassSettingsSheet
-import com.better.heybox.liquidglass.LiquidGlassInstaller
 
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -83,10 +80,10 @@ class SettingsEntryHook(private val module: MainModule) {
                     Runnable { maybeShowDisclaimer(activity) }, 1000L
                 )
             } catch (t: Throwable) {
-                module.logd(Log.WARN, MainModule.TAG, "液态玻璃实现启动提示调度失败: " + t)
+                module.logd(Log.WARN, MainModule.TAG, "启动提示调度失败: " + t)
             }
         }
-        module.logd(Log.INFO, MainModule.TAG, "✔ 液态玻璃实现启动提示 Hook 已安装")
+        module.logd(Log.INFO, MainModule.TAG, "✔ 启动提示 Hook 已安装")
     }
 
     private fun hookSettingsEntry(cl: ClassLoader) {
@@ -1015,18 +1012,6 @@ class SettingsEntryHook(private val module: MainModule) {
                         showOpenWebDialog(activity)
                     })
 
-                    Action.RESET_GLASS -> setRowClick(itemCls, item, View.OnClickListener { _ ->
-                        resetLiquidGlassSettings(activity)
-                    })
-
-                    Action.CHOOSE_GLASS -> setRowClick(itemCls, item, View.OnClickListener { _ ->
-                        showGlassProviderDialog(activity)
-                    })
-
-                    Action.GLASS_SHEET -> setRowClick(itemCls, item, View.OnClickListener { _ ->
-                        GlassSettingsSheet.show(activity)
-                    })
-
                     Action.POST_LEVEL -> setRowClick(itemCls, item, View.OnClickListener { _ ->
                         showPostLevelDialog(activity)
                     })
@@ -1255,15 +1240,6 @@ class SettingsEntryHook(private val module: MainModule) {
                         App.KEY_HIDE_MSG_BADGE == def.key
                     ) {
                         MessageRedDotHook.refresh()
-                    }
-                    if (App.KEY_LIQUID_GLASS == def.key) {
-                        LiquidGlassInstaller.applyGlassEnabled(activity)
-                    }
-                    if (App.KEY_GLASS_IMMERSIVE == def.key ||
-                        App.KEY_GLASS_ADAPTIVE == def.key ||
-                        App.KEY_GLASS_FIT_TABS == def.key
-                    ) {
-                        LiquidGlassInstaller.refreshGlassWith(activity)
                     }
                     if (App.KEY_DEBUG_NO_DOWNGRADE == def.key) {
                         if (isChecked) {
@@ -1517,57 +1493,6 @@ class SettingsEntryHook(private val module: MainModule) {
             activity, "分享渠道", SHARE_CHANNEL_LABELS, checked,
             OptionPick { index -> applyShareChannel(activity, index) }
         )
-    }
-
-    private fun showGlassProviderDialog(activity: Activity) {
-        withHeyboxDialog(
-            activity,
-            NativeDialogCall { spec -> showGlassProviderDialogNative(activity, spec) },
-            Runnable { showGlassProviderDialogFallback(activity) }
-        )
-    }
-
-    @Throws(Exception::class)
-    private fun showGlassProviderDialogNative(activity: Activity, spec: DexKitResolver.HeyboxDialogSpec) {
-        val current = module.getString(App.KEY_GLASS_PROVIDER, "")
-        val checked = if (GlassProvider.PROVIDER_HBMOD == current) 1 else 0
-        val list = buildOptionRowList(activity, GLASS_PROVIDER_LABELS, checked)
-        val dialog = spec.buildAndShow(
-            activity, "选择液态玻璃实现", list, null, null,
-            "取消", DialogInterface.OnClickListener { d, _ -> d.dismiss() }
-        )
-        bindOptionRows(dialog, list, OptionPick { index ->
-            chooseGlassProvider(activity, GLASS_PROVIDER_VALUES[index])
-        })
-        module.logd(Log.INFO, MainModule.TAG, "✔ 使用小黑盒原生弹窗选择液态玻璃实现")
-    }
-
-    private fun showGlassProviderDialogFallback(activity: Activity) {
-        val current = module.getString(App.KEY_GLASS_PROVIDER, "")
-        val checked = if (GlassProvider.PROVIDER_HBMOD == current) 1 else 0
-        showSingleChoiceFallback(
-            activity, "选择液态玻璃实现", GLASS_PROVIDER_LABELS, checked,
-            OptionPick { index -> chooseGlassProvider(activity, GLASS_PROVIDER_VALUES[index]) }
-        )
-    }
-
-    private fun chooseGlassProvider(activity: Activity, value: String) {
-        try {
-            HeyboxPrefs.setString(App.KEY_GLASS_PROVIDER, value)
-            LogRecorder.recordEvent("液态玻璃实现已选择: " + value)
-        } catch (t: Throwable) {
-            module.logd(Log.WARN, MainModule.TAG, "保存液态玻璃实现选择失败: " + t)
-            return
-        }
-        try {
-            val panelRef = mSettingsPanel
-            val panel = panelRef?.get()
-            if (panel != null && panel.parent != null) {
-                showEmbeddedSettings(activity)
-            }
-        } catch (ignored: Throwable) {
-        }
-        showRestartAppDialog(activity, activity.classLoader)
     }
 
     private fun refreshEmbeddedPanel(activity: Activity) {
@@ -2150,7 +2075,6 @@ class SettingsEntryHook(private val module: MainModule) {
     private fun maybeShowDisclaimer(activity: Activity) {
         try {
             if (HeyboxPrefs.getBoolean(App.KEY_DISCLAIMER_ACCEPTED, false)) {
-                maybePromptGlassProvider(activity)
                 return
             }
             withHeyboxDialog(
@@ -2201,9 +2125,6 @@ class SettingsEntryHook(private val module: MainModule) {
 
     private fun acceptDisclaimer(activity: Activity) {
         writeEmbeddedBoolean(activity, App.KEY_DISCLAIMER_ACCEPTED, true)
-        activity.window.decorView.postDelayed(
-            Runnable { maybePromptGlassProvider(activity) }, 600L
-        )
     }
 
     private fun exitWithoutConsent(activity: Activity) {
@@ -2211,27 +2132,6 @@ class SettingsEntryHook(private val module: MainModule) {
             activity.finishAffinity()
         } catch (t: Throwable) {
             activity.finish()
-        }
-    }
-
-    private fun maybePromptGlassProvider(activity: Activity) {
-        try {
-            if (sLaunchPromptShown) {
-                return
-            }
-            if (!HeyboxPrefs.getBoolean(App.KEY_DISCLAIMER_ACCEPTED, false)) {
-                return
-            }
-            if (!GlassProvider.isHbmodInstalled(activity)) {
-                return
-            }
-            if (!module.getString(App.KEY_GLASS_PROVIDER, "")!!.isEmpty()) {
-                return
-            }
-            sLaunchPromptShown = true
-            activity.window.decorView.post { showGlassProviderDialog(activity) }
-        } catch (t: Throwable) {
-            module.logd(Log.WARN, MainModule.TAG, "液态玻璃实现选择提示失败: " + t)
         }
     }
 
@@ -2395,31 +2295,6 @@ class SettingsEntryHook(private val module: MainModule) {
         }
     }
 
-    private fun resetLiquidGlassSettings(activity: Activity) {
-        HeyboxPrefs.setBoolean(App.KEY_LIQUID_GLASS, true)
-        HeyboxPrefs.setBoolean(App.KEY_GLASS_IMMERSIVE, true)
-        module.onSettingChanged(App.KEY_LIQUID_GLASS)
-        module.onSettingChanged(App.KEY_GLASS_IMMERSIVE)
-        HeyboxPrefs.setBoolean(App.KEY_GLASS_ADAPTIVE, true)
-        HeyboxPrefs.setString(App.KEY_GLASS_DARK_COLOR, "#000000")
-        HeyboxPrefs.setString(App.KEY_GLASS_DARK_ALPHA, "56")
-        HeyboxPrefs.setString(App.KEY_GLASS_LIGHT_COLOR, "#FFFFFF")
-        HeyboxPrefs.setString(App.KEY_GLASS_LIGHT_ALPHA, "64")
-        HeyboxPrefs.setString(App.KEY_GLASS_BAR_HEIGHT, "0")
-        HeyboxPrefs.setString(App.KEY_GLASS_BAR_OFFSET, "16")
-        HeyboxPrefs.setBoolean(App.KEY_GLASS_FIT_TABS, false)
-        HeyboxPrefs.setString(App.KEY_GLASS_SIDE_MARGIN, "16")
-        HeyboxPrefs.setString(App.KEY_GLASS_BAR_WIDTH_MODE, "0")
-        HeyboxPrefs.setString(App.KEY_GLASS_BAR_WIDTH_PCT, "100")
-        HeyboxPrefs.setString(App.KEY_GLASS_TAB_WIDTH_PCT, "100")
-        HeyboxPrefs.setString(App.KEY_GLASS_BAR_LAYOUT, "0")
-        maybeRefreshGlassRuntime(activity, App.KEY_LIQUID_GLASS)
-        Toast.makeText(activity, "液态玻璃设置已恢复默认", Toast.LENGTH_SHORT).show()
-        val panelRef = mSettingsPanel
-        val panel = panelRef?.get()
-        if (panel != null && panel.parent != null) showEmbeddedSettings(activity)
-    }
-
     private fun showImageCacheDirDialog(activity: Activity) {
         val current = HeyboxPrefs.getString(App.KEY_IMAGE_CACHE_DIR, "") ?: ""
         withHeyboxDialog(
@@ -2564,7 +2439,6 @@ class SettingsEntryHook(private val module: MainModule) {
         val saveListener = DialogInterface.OnClickListener { d, _ ->
             try {
                 HeyboxPrefs.setString(k, input.text.toString().trim())
-                maybeRefreshGlassRuntime(activity, k)
                 Toast.makeText(activity, "已保存", Toast.LENGTH_SHORT).show()
                 module.logd(Log.INFO, MainModule.TAG, "分享链接已保存: " + k)
             } catch (t: Throwable) {
@@ -2595,8 +2469,7 @@ class SettingsEntryHook(private val module: MainModule) {
                 .setPositiveButton("保存", DialogInterface.OnClickListener { _, _ ->
                     try {
                         HeyboxPrefs.setString(k, input.text.toString().trim())
-                        maybeRefreshGlassRuntime(activity, k)
-                        Toast.makeText(activity, "已保存", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(activity, "已保存", Toast.LENGTH_SHORT).show()
                         module.logd(Log.INFO, MainModule.TAG, "分享链接已保存: " + k)
                     } catch (t: Throwable) {
                         module.logd(Log.WARN, MainModule.TAG, "保存分享链接失败: " + t)
@@ -2611,7 +2484,7 @@ class SettingsEntryHook(private val module: MainModule) {
 
     private fun showRestartAppDialog(
         activity: Activity, cl: ClassLoader,
-        message: String = "底栏改动需重启小黑盒后生效"
+        message: String = "该改动需重启小黑盒后生效"
     ) {
         try {
             val ktCls: Class<*> = Class.forName(
@@ -3238,20 +3111,6 @@ class SettingsEntryHook(private val module: MainModule) {
         return "com.better.heybox"
     }
 
-    private fun maybeRefreshGlassRuntime(activity: Activity?, key: String?) {
-        if (key == null || activity == null) {
-            return
-        }
-        if (App.KEY_LIQUID_GLASS != key && !key.startsWith("glass_")) {
-            return
-        }
-        try {
-            LiquidGlassInstaller.refreshGlassWith(activity)
-        } catch (t: Throwable) {
-            module.logd(Log.WARN, MainModule.TAG, "玻璃设置运行时刷新失败: " + key, t)
-        }
-    }
-
     private fun requestModuleReload(activity: Activity) {
         try {
             val request = Intent(PreferenceReceiver.ACTION_RELOAD_MODULE)
@@ -3306,7 +3165,7 @@ class SettingsEntryHook(private val module: MainModule) {
                     ),
                     entry(
                         PAGE_UI, "界面与外观",
-                        "液态玻璃、底栏隐藏、单列信息流"
+                        "消息红点、单列信息流"
                     ),
                     entry(
                         PAGE_BROWSE, "浏览与下载",
@@ -3347,11 +3206,6 @@ class SettingsEntryHook(private val module: MainModule) {
             return groups
         }
         if (PAGE_UI == pageId) {
-            val glass = buildGlassGroup(activity)
-            if (glass != null) {
-                groups.add(glass)
-            }
-            groups.add(buildBottomTabGroup(activity))
             groups.add(buildMessageRedDotGroup())
             if (VersionUtils.isHeyboxBuildAtLeast(
                     activity, EXPERIMENTAL_HEYBOX_VERSION,
@@ -4282,54 +4136,6 @@ class SettingsEntryHook(private val module: MainModule) {
         groups.add(insertAt, group)
     }
 
-    private fun buildGlassGroup(activity: Activity): SettingsGroup? {
-        val switchable = GlassProvider.isHbmodInstalled(activity) ||
-                GlassProvider.prefersHbmod(module)
-        val ownGlass = !GlassProvider.prefersHbmod(module)
-        val rows = ArrayList<SwitchDef>()
-        if (switchable) {
-            val label = GlassProvider.providerLabel(
-                module.getString(App.KEY_GLASS_PROVIDER, "")
-            )
-            rows.add(
-                SwitchDef(
-                    "液态玻璃提供方",
-                    "当前：" + label, null, false, false, true, null, Action.CHOOSE_GLASS
-                )
-            )
-        }
-        if (ownGlass) {
-            rows.add(SwitchDef("液态玻璃底栏", "底栏显示液态玻璃", App.KEY_LIQUID_GLASS, true, false))
-            rows.add(SwitchDef("沉浸式小白条", "底栏延伸至手势区域", App.KEY_GLASS_IMMERSIVE, true, false))
-            rows.add(SwitchDef("自适应反色", "文字图标随背景反色", App.KEY_GLASS_ADAPTIVE, true, false))
-            rows.add(
-                SwitchDef(
-                    "加长选中 Tab",
-                    "隐藏标签后选中项加长，底栏随可见数量收缩",
-                    App.KEY_GLASS_FIT_TABS, false, false
-                )
-            )
-            rows.add(
-                SwitchDef(
-                    "玻璃条宽度",
-                    "宽度模式 / 左右边距 / Tab 宽度，打开调节面板",
-                    null, false, false, true, null, Action.GLASS_SHEET
-                )
-            )
-            rows.add(SwitchDef("暗色模式底色", "例如 #000000", null, false, false, true, App.KEY_GLASS_DARK_COLOR))
-            rows.add(SwitchDef("暗色模式不透明度", "5-98 的百分比", null, false, false, true, App.KEY_GLASS_DARK_ALPHA))
-            rows.add(SwitchDef("亮色模式底色", "例如 #FFFFFF", null, false, false, true, App.KEY_GLASS_LIGHT_COLOR))
-            rows.add(SwitchDef("亮色模式不透明度", "5-98 的百分比", null, false, false, true, App.KEY_GLASS_LIGHT_ALPHA))
-            rows.add(SwitchDef("玻璃条高度", "0 自动，或 51-99 dp", null, false, false, true, App.KEY_GLASS_BAR_HEIGHT))
-            rows.add(SwitchDef("距屏幕底部", "0-40 dp", null, false, false, true, App.KEY_GLASS_BAR_OFFSET))
-            rows.add(SwitchDef("恢复液态玻璃默认设置", "恢复默认外观与布局", null, false, false, true, null, Action.RESET_GLASS))
-        }
-        if (rows.isEmpty()) {
-            return null
-        }
-        return SettingsGroup("液态玻璃", rows.toTypedArray())
-    }
-
     private fun buildEntryCard(activity: Activity): View? {
         try {
             val cl = activity.classLoader
@@ -4391,8 +4197,7 @@ class SettingsEntryHook(private val module: MainModule) {
 
     internal enum class Action {
         NONE, EDIT_LINK, CLEAR_DAILY, CHANNEL, EXPORT, IMPORT,
-        EXPORT_LOG, CLEAR_LOG, VIEW_LOG, RUNTIME_STATUS, TARGET_STATUS, RELOAD_MODULE, OPEN_WEB, PICK_DIR, IMAGE_CACHE_DIR, RESET_GLASS,
-        CHOOSE_GLASS, GLASS_SHEET,
+        EXPORT_LOG, CLEAR_LOG, VIEW_LOG, RUNTIME_STATUS, TARGET_STATUS, RELOAD_MODULE, OPEN_WEB, PICK_DIR, IMAGE_CACHE_DIR,
         TEST_CRASH,
         POST_LEVEL, POST_KEYWORDS, POST_TAGS, COMMENT_KEYWORDS, COMMENT_FILTER_DIAG, AI_PROVIDER, AI_PROMPT, AI_TEST,
         AI_MAX_TOKENS,
@@ -4445,7 +4250,6 @@ class SettingsEntryHook(private val module: MainModule) {
         private var sPendingPick: PickCallback? = null
 
         @Volatile
-        private var sLaunchPromptShown: Boolean = false
 
         private val BASE_GROUPS: Array<SettingsGroup> = arrayOf(
             SettingsGroup(
@@ -4749,34 +4553,6 @@ class SettingsEntryHook(private val module: MainModule) {
             return sb.toString()
         }
 
-        private fun buildBottomTabGroup(activity: Activity): SettingsGroup {
-            val home = labelOr(
-                BottomTabHook.runtimeTabLabel(0),
-                MainModule.getHeyboxTabLabel(activity, "discover", "发现")
-            )
-            val slot2 = labelOr(
-                BottomTabHook.runtimeTabLabel(1),
-                MainModule.getHeyboxTabLabel(activity, "game_store", "游戏库")
-            )
-            val slot4 = labelOr(
-                BottomTabHook.runtimeTabLabel(2),
-                MainModule.getHeyboxTabLabel(activity, "bbs", "社区")
-            )
-            return SettingsGroup(
-                "底部导航栏", arrayOf(
-                    SwitchDef("禁止底栏热更新", "保留已有底栏策略和图标；仅支持 1.3.400 (1149) 和 1.3.401 (1150)，重启生效", App.KEY_BLOCK_BOTTOM_TAB_UPDATE, false, true),
-                    SwitchDef("隐藏「" + home + "」", null, App.KEY_HIDE_TAB_HOME, false, true),
-                    SwitchDef("隐藏「" + slot2 + "」", null, App.KEY_HIDE_TAB_HOT, false, true),
-                    SwitchDef("隐藏「" + slot4 + "」", null, App.KEY_HIDE_TAB_GAME, false, true),
-                    SwitchDef("隐藏「加号」", null, App.KEY_HIDE_ADD, false, true),
-                )
-            )
-        }
-
-        private fun labelOr(runtime: String?, fallback: String?): String? {
-            return if (runtime != null && !runtime.trim().isEmpty()) runtime else fallback
-        }
-
         private const val TITLE_GENERAL = "通用"
         private const val EXPERIMENTAL_HEYBOX_VERSION = "1.3.396"
         private const val EXPERIMENTAL_HEYBOX_MIN_CODE = 1134L
@@ -4978,13 +4754,6 @@ class SettingsEntryHook(private val module: MainModule) {
 
         private val SHARE_CHANNELS = arrayOf("QQ", "WECHAT", "WEIBO")
         private val SHARE_CHANNEL_LABELS = arrayOf("QQ / QQ空间", "微信 / 朋友圈", "微博")
-
-        private val GLASS_PROVIDER_VALUES = arrayOf(
-            GlassProvider.PROVIDER_OWN, GlassProvider.PROVIDER_HBMOD
-        )
-        private val GLASS_PROVIDER_LABELS = arrayOf(
-            "BetterHeybox（模块自带）", "小黑盒液态玻璃模块"
-        )
 
         private val POST_LEVEL_VALUES = arrayOf(
             "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"

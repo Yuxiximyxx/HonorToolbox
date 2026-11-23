@@ -11,7 +11,6 @@ import com.better.heybox.App
 import com.better.heybox.ForegroundTracker
 import com.better.heybox.LogRecorder
 import com.better.heybox.MainModule
-import com.better.heybox.liquidglass.LiquidGlassInstaller
 import com.better.heybox.liquidglass.WindowImmersiveController
 import java.lang.reflect.Method
 import java.util.Collections
@@ -99,9 +98,9 @@ class GeneralHook(private val module: MainModule) {
         val name = activity.javaClass.name.lowercase()
         val mediaLike = MEDIA_KEYWORDS.any { name.contains(it) }
         if (mediaLike) {
-            LiquidGlassInstaller.applyImmersive(activity)
+            WindowImmersiveController.apply(activity)
         } else {
-            LiquidGlassInstaller.applyImmersiveLite(activity)
+            WindowImmersiveController.applyLite(activity)
         }
     }
 

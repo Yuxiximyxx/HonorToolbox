@@ -63,18 +63,6 @@ object ModuleStats {
 
     @JvmField val myTaskAbort = AtomicInteger()
 
-    @JvmField val bottomTabApplies = AtomicInteger()
-
-    @JvmField val bottomTabReentrySkips = AtomicInteger()
-
-    @JvmField val bottomTabLayoutListeners = AtomicInteger()
-
-    @JvmField val bottomTabHides = AtomicInteger()
-
-    @JvmField val bottomTabHideNoops = AtomicInteger()
-
-    @JvmField val bottomTabLayoutFixes = AtomicInteger()
-
     @JvmField val videoControllersCreated = AtomicInteger()
 
     @JvmField val videoDecorListenersRemoved = AtomicInteger()
@@ -102,8 +90,6 @@ object ModuleStats {
     @JvmField val feedFlowListItems = AtomicInteger()
 
     @JvmField val feedConfigRebuilds = AtomicInteger()
-
-    @JvmField val tipWatcherScans = AtomicInteger()
 
     @JvmField val slowOps = AtomicInteger()
 
@@ -160,13 +146,6 @@ object ModuleStats {
         sb.append('\n').append("首页过滤(#44)：条目判定=").append(feedBinds.get())
             .append(" / 列表层条目=").append(feedFlowListItems.get())
             .append(" / 配置快照重建=").append(feedConfigRebuilds.get())
-            .append(" / 提示条全树扫描=").append(tipWatcherScans.get())
-        sb.append('\n').append("底部导航(#37)：应用=").append(bottomTabApplies.get())
-            .append(" / 重入拦截=").append(bottomTabReentrySkips.get())
-            .append(" / layout监听器注册=").append(bottomTabLayoutListeners.get())
-            .append(" / 隐藏生效=").append(bottomTabHides.get())
-            .append(" / 重复隐藏跳过=").append(bottomTabHideNoops.get())
-            .append(" / 布局修正=").append(bottomTabLayoutFixes.get())
         sb.append('\n').append("资源回收：视频窗口控制器=").append(videoControllersCreated.get())
             .append(" / 视频监听器移除=").append(videoDecorListenersRemoved.get())
             .append(" / 文本选择在册=")

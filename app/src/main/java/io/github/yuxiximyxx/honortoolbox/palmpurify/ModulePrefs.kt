@@ -7,10 +7,6 @@ object ModulePrefs {
     const val DEFAULT_IMMERSIVE = true
     const val KEY_BLOCK_SPLASH_AD = "block_splash_ad"
     const val DEFAULT_BLOCK_SPLASH_AD = true
-    const val KEY_SLIM_TABBAR = "slim_tabbar"
-    const val DEFAULT_SLIM_TABBAR = true
-    const val KEY_HIDE_CENTER_BTN = "hide_center_btn"
-    const val DEFAULT_HIDE_CENTER_BTN = true
     const val KEY_SLIM_HOME_MODULES = "slim_home_modules"
     const val DEFAULT_SLIM_HOME_MODULES = true
     const val KEY_BLOCK_PROMO_DIALOG = "block_promo_dialog"

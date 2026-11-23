@@ -27,8 +27,8 @@ android {
         applicationId = "io.github.yuxiximyxx.honortoolbox"
         minSdk = 34   // Android 14 (MagicOS 8 起，与 MagicPods 一致)
         targetSdk = 35
-        versionCode = 28
-        versionName = "1.9.0"
+        versionCode = 29
+        versionName = "1.10.0"
         // 资源库增强（LibraryPlus 合入）带 DexKit 原生库，只留 arm64
         ndk { abiFilters += listOf("arm64-v8a") }
     }
@@ -238,9 +238,8 @@ dependencies {
     // 找不到目标时各 hook 自带硬编码类名兜底（原 LibraryPlus 同款）
     implementation("org.luckypray:dexkit:2.3.0")
 
-    // 小黑盒增强（BetterHeybox 合入，v1.7.0）：原模块液态
-    // 玻璃底栏基于的 View 版玻璃库（com.example.liquidglass），
-    // 与原 fork 同一提交钉版，经 JitPack 引入
-    implementation("com.github.QWEA0:liquidglass:90f4ea28e3")
+    // 小黑盒增强（BetterHeybox 合入，v1.7.0）：原模块的液态
+    // 玻璃底栏已于 v1.10.0 整套移除（底栏归 LiquidTab 接管），
+    // 其 View 版玻璃库依赖（com.github.QWEA0:liquidglass）随之去掉。
     implementation("io.github.kyant0:shapes:1.2.1")
 }

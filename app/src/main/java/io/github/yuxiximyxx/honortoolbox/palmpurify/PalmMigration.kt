@@ -29,11 +29,9 @@ import java.io.File
  *    一次 XSharedPreferences（能读到就同样处理）。
  * 全程静默：读不到旧配置就用默认值，不阻塞、不报错。
  *
- * 映射口径：9 个开关的键名/默认值与独立版完全一致，逐键直搬。
- * 其中 slim_tabbar 的用户值直搬为新版「底栏精简」总闸——总闸
- * 语义不变（关=底栏原样），逐项显隐的缺省又与原精简结果
- * 一致（首页/我的显示、其余隐藏），所以他若改过总开关，
- * 迁移后效果与原来一致。
+ * 映射口径：开关的键名/默认值与独立版完全一致，逐键直搬。
+ * v1.10.0 起底栏归 LiquidTab 接管：slim_tabbar 与
+ * hide_center_btn 不再迁移（存量值留在旧存储里无害）。
  */
 object PalmMigration {
 
@@ -46,8 +44,6 @@ object PalmMigration {
     private val KEYS: List<Pair<String, Boolean>> = listOf(
         ModulePrefs.KEY_IMMERSIVE to ModulePrefs.DEFAULT_IMMERSIVE,
         ModulePrefs.KEY_BLOCK_SPLASH_AD to ModulePrefs.DEFAULT_BLOCK_SPLASH_AD,
-        ModulePrefs.KEY_SLIM_TABBAR to ModulePrefs.DEFAULT_SLIM_TABBAR,
-        ModulePrefs.KEY_HIDE_CENTER_BTN to ModulePrefs.DEFAULT_HIDE_CENTER_BTN,
         ModulePrefs.KEY_SLIM_HOME_MODULES to ModulePrefs.DEFAULT_SLIM_HOME_MODULES,
         ModulePrefs.KEY_BLOCK_PROMO_DIALOG to ModulePrefs.DEFAULT_BLOCK_PROMO_DIALOG,
         ModulePrefs.KEY_BLOCK_UPDATE_DIALOG to ModulePrefs.DEFAULT_BLOCK_UPDATE_DIALOG,

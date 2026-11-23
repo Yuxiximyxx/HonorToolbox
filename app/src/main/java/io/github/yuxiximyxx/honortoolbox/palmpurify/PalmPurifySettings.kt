@@ -24,22 +24,18 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
  * 「掌盟净化」设置子页（原 PalmPurify 独立 App 的 InfoActivity
- * 设置项逐项搬入，改 Miuix 页）：9 个开关与独立版一一对应，
+ * 设置项逐项搬入，改 Miuix 页）：开关与独立版一一对应，
  * 键名/默认值不变，读写走 [PalmPrefs] 落盘现读通道。
  *
  * 与独立版的差异只有宿主层：主题由工具箱宿主提供、返回落到
  * 工具箱「应用」页、配置通道由 RemotePreferences 换成落盘。
  * 打开子页时先跑一次旧配置迁移（见 [PalmMigration]）。
  *
- * v1.6.0 追加（小乐点名，单独标注）：「底栏显示」一组——
- * 原单一 slim_tabbar 改为总闸 + 逐项自定义，逐项名单来自
- * hook 在掌盟里实际命中的底栏项标签（[PalmPrefs.tabLabels]），
- * 没发现记录时先列缺省的「首页/我的」两项并注明其余项要
- * 打开一次掌盟后才出现。
- *
- * v1.6.1：名单改按 [PalmPrefs.tabEntries] 全量列（稳定身份
- * 制，纯图标项也记得到，不再只有带文字的三项）；逐项开关
- * 读值走 [PalmPrefs.tabShow] 旧键兼容读、写只写新键。
+ * v1.10.0：按小乐定案去掉「底栏显示」整组（底栏精简总闸、
+ * 逐项显示开关、隐藏中间加号）——掌盟底栏今后由 LiquidTab
+ * 模块统一接管，本模块不再触碰掌盟底栏；其余组（界面/开屏/
+ * 首页/弹窗/其他）原样保留，「透明沉浸」是系统导航条沉浸、
+ * 不属于应用底栏，保留不动。
  */
 @Composable
 internal fun PalmPurifyScreen(
@@ -87,53 +83,6 @@ internal fun PalmPurifyScreen(
                         summary = "冷启动时短路开屏广告的展示",
                         key = ModulePrefs.KEY_BLOCK_SPLASH_AD,
                         default = ModulePrefs.DEFAULT_BLOCK_SPLASH_AD,
-                        bump = bump,
-                    )
-                }
-            }
-            item { SmallTitle("底栏显示") }
-            item {
-                val gate = PalmPrefs.bool(ModulePrefs.KEY_SLIM_TABBAR, ModulePrefs.DEFAULT_SLIM_TABBAR)
-                Card(Modifier.padding(horizontal = 12.dp).fillMaxWidth()) {
-                    PalmSwitch(
-                        title = "底栏精简",
-                        summary = "总开关：关掉后底栏恢复原样，下面的逐项开关不生效",
-                        key = ModulePrefs.KEY_SLIM_TABBAR,
-                        default = ModulePrefs.DEFAULT_SLIM_TABBAR,
-                        bump = bump,
-                    )
-                    val entries = PalmPrefs.tabEntries()
-                    if (entries.isEmpty()) {
-                        PalmSwitch(
-                            title = "首页",
-                            summary = "底栏功能项（逐项名单待打开一次掌盟后补齐）",
-                            key = PalmPrefs.tabShowKey("首页"),
-                            default = true,
-                            enabled = gate,
-                            bump = bump,
-                        )
-                        PalmSwitch(
-                            title = "我的",
-                            summary = "底栏功能项（逐项名单待打开一次掌盟后补齐）",
-                            key = PalmPrefs.tabShowKey("我的"),
-                            default = true,
-                            enabled = gate,
-                            bump = bump,
-                        )
-                    } else {
-                        for (entry in entries) {
-                            PalmTabSwitch(
-                                entry = entry,
-                                enabled = gate,
-                                bump = bump,
-                            )
-                        }
-                    }
-                    PalmSwitch(
-                        title = "隐藏中间加号",
-                        summary = "藏掉底栏中间的加号按钮",
-                        key = ModulePrefs.KEY_HIDE_CENTER_BTN,
-                        default = ModulePrefs.DEFAULT_HIDE_CENTER_BTN,
                         bump = bump,
                     )
                 }
@@ -190,33 +139,6 @@ internal fun PalmPurifyScreen(
             }
         }
     }
-}
-
-/**
- * 一个底栏逐项开关行（v1.6.1）：读走 [PalmPrefs.tabShow]
- * 旧键兼容读（v1.6.0 已调的值不失效），写只写新键
- * `tab_show_<身份>`，写过一次即完成该项的键迁移。
- */
-@Composable
-private fun PalmTabSwitch(
-    entry: PalmPrefs.TabEntry,
-    enabled: Boolean = true,
-    bump: () -> Unit,
-) {
-    SuperSwitch(
-        title = entry.title,
-        summary = "在底栏显示这一项；藏掉后其余项自动等距铺满",
-        checked = PalmPrefs.tabShow(
-            entry.identity,
-            entry.legacyLabel,
-            PalmPrefs.defaultTabShow(entry),
-        ),
-        enabled = enabled,
-        onCheckedChange = { value ->
-            PalmPrefs.putBool(PalmPrefs.tabShowKey(entry.identity), value)
-            bump()
-        },
-    )
 }
 
 /** 一个 PalmPurify 开关行：读走 [PalmPrefs] 现读，写即落盘并触发重组刷新。 */

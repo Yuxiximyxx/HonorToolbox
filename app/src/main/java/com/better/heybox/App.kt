@@ -19,11 +19,6 @@ object App {
     const val KEY_BUBBLE_AD = "bubble_ad"
     const val KEY_CORNER_AD = "corner_ad"
     const val KEY_PROMOTE_AD = "promote_ad"
-    const val KEY_BLOCK_BOTTOM_TAB_UPDATE = "block_bottom_tab_update"
-    const val KEY_HIDE_TAB_HOME = "hide_tab_home"
-    const val KEY_HIDE_TAB_HOT = "hide_tab_hot"
-    const val KEY_HIDE_TAB_GAME = "hide_tab_game"
-    const val KEY_HIDE_ADD = "hide_add"
     const val KEY_COPY_POST = "copy_post"
     const val KEY_CUSTOM_TEXT_SELECT = "custom_text_select"
     const val KEY_COMMENT_FREE_COPY = "comment_free_copy"
@@ -108,33 +103,13 @@ object App {
     const val KEY_WEB_LOG_DATA = "web_log_data"
     const val KEY_LOG = "log"
     const val KEY_WEBVIEW_DEVTOOLS = "webview_devtools"
-    const val KEY_LIQUID_GLASS = "liquid_glass"
-    const val KEY_GLASS_IMMERSIVE = "glass_immersive"
-    const val KEY_GLASS_ADAPTIVE = "glass_adaptive"
-    const val KEY_GLASS_DARK_COLOR = "glass_dark_color"
-    const val KEY_GLASS_DARK_ALPHA = "glass_dark_alpha"
-    const val KEY_GLASS_LIGHT_COLOR = "glass_light_color"
-    const val KEY_GLASS_LIGHT_ALPHA = "glass_light_alpha"
-    const val KEY_GLASS_BAR_HEIGHT = "glass_bar_height"
-    const val KEY_GLASS_BAR_OFFSET = "glass_bar_offset"
-    const val KEY_GLASS_SIDE_MARGIN = "glass_side_margin"
-    const val KEY_GLASS_FIT_TABS = "glass_fit_tabs"
-    const val KEY_GLASS_BAR_WIDTH_MODE = "glass_bar_width_mode"
-    const val KEY_GLASS_BAR_WIDTH_PCT = "glass_bar_width_pct"
-    const val KEY_GLASS_TAB_WIDTH_PCT = "glass_tab_width_pct"
-    const val KEY_GLASS_BAR_LAYOUT = "glass_bar_layout"
 
-    const val KEY_GLASS_SEARCH_IN_BAR = "glass_search_in_bar"
 
-    const val KEY_GLASS_PROVIDER = "glass_provider"
     const val KEY_SINGLE_COLUMN_FEED = "single_column_feed"
     const val KEY_POST_MIN_LEVEL = "post_min_level"
     const val KEY_POST_MIN_LIKE = "post_min_like"
     const val KEY_POST_MIN_COMMENT = "post_min_comment"
     const val KEY_POST_MIN_FAVOUR = "post_min_favour"
-    const val KEY_GLASS_TAB_SELECT_COLOR = "glass_tab_select_color"
-    const val KEY_GLASS_TAB_SELECT_ALPHA = "glass_tab_select_alpha"
-    const val KEY_GLASS_TAB_ORDER = "glass_tab_order"
     const val KEY_POST_FILTER_SKIP_SEARCH = "post_filter_skip_search"
     const val KEY_POST_FILTER_SKIP_FOLLOW = "post_filter_skip_follow"
     const val KEY_IMAGE_AUTO_ORIGINAL = "image_auto_original"
@@ -188,8 +163,6 @@ object App {
     const val KEY_AI_TOKEN = "ai_token"
     const val KEY_AI_PROMPT = "ai_prompt"
     const val KEY_AI_MAX_TOKENS = "ai_max_tokens"
-    const val KEY_GLASS_DARK_PRESET = "glass_dark_preset"
-    const val KEY_GLASS_LIGHT_PRESET = "glass_light_preset"
     const val KEY_WEBVIEW_ENTRY_URL = "webview_entry_url"
     const val KEY_DISCLAIMER_ACCEPTED = "disclaimer_accepted"
     const val KEY_MODULE_VERSION_FLOOR = "module_version_floor"
@@ -226,11 +199,6 @@ object App {
             m.put(KEY_BUBBLE_AD, true);
             m.put(KEY_CORNER_AD, true);
             m.put(KEY_PROMOTE_AD, true);
-            m.put(KEY_BLOCK_BOTTOM_TAB_UPDATE, false);
-            m.put(KEY_HIDE_TAB_HOME, false);
-            m.put(KEY_HIDE_TAB_HOT, false);
-            m.put(KEY_HIDE_TAB_GAME, false);
-            m.put(KEY_HIDE_ADD, false);
             m.put(KEY_COPY_POST, true);
             m.put(KEY_CUSTOM_TEXT_SELECT, false);
             m.put(KEY_COMMENT_FREE_COPY, true);
@@ -271,11 +239,6 @@ object App {
             m.put(KEY_FAKE_NOTIFICATION, false);
             m.put(KEY_LOG, false);
             m.put(KEY_WEBVIEW_DEVTOOLS, false);
-            m.put(KEY_LIQUID_GLASS, true);
-            m.put(KEY_GLASS_IMMERSIVE, true);
-            m.put(KEY_GLASS_ADAPTIVE, true);
-            m.put(KEY_GLASS_FIT_TABS, false);
-            m.put(KEY_GLASS_SEARCH_IN_BAR, false);
             m.put(KEY_SINGLE_COLUMN_FEED, false);
             m.put(KEY_POST_AI_ENABLED, false);
             m.put(KEY_POST_NO_LEVEL, false);

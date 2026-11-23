@@ -1,5 +1,8 @@
 package com.better.heybox.liquidglass
 
+import android.util.Log
+import com.better.heybox.LogRecorder
+
 import android.app.Activity
 import android.graphics.Color
 import android.graphics.Insets
@@ -11,6 +14,12 @@ import android.view.WindowManager
 import java.util.Collections
 import java.util.WeakHashMap
 
+/**
+ * 系统导航条沉浸控制器（原 liquidglass 包唯一保留件）：只透
+ * 明系统导航条/清零导航条 inset，不碰小黑盒自有底栏。
+ * v1.10.0 起液态玻璃底栏整套移除后，本控制器不再读
+ * glass_immersive 等已删配置键，沉浸按原缺省（开）常开。
+ */
 internal object WindowImmersiveController {
 
     private val STATES: MutableMap<Activity, State> =
@@ -54,10 +63,6 @@ internal object WindowImmersiveController {
             if (window == null) {
                 return
             }
-            if (!GlassConfig.immersiveGestureNavigation) {
-                restore(activity, window)
-                return
-            }
             val existing = STATES[activity]
             val fresh = existing == null
             val state = existing ?: State(window).also { STATES[activity] = it }
@@ -94,9 +99,7 @@ internal object WindowImmersiveController {
             )
             window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION)
         } catch (t: Throwable) {
-            LiquidGlassLog.logErr(
-                WindowImmersiveController::class.java.simpleName, t
-            )
+            logErr(t)
         }
     }
 
@@ -105,7 +108,7 @@ internal object WindowImmersiveController {
      *  底部会留黑条；这里直接对 dialog 的 window 做同样的处理。 */
     @JvmStatic
     fun applyToWindow(window: Window?) {
-        if (window == null || !GlassConfig.immersiveGestureNavigation) {
+        if (window == null) {
             return
         }
         try {
@@ -133,45 +136,7 @@ internal object WindowImmersiveController {
             )
             window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION)
         } catch (t: Throwable) {
-            LiquidGlassLog.logErr(
-                WindowImmersiveController::class.java.simpleName, t
-            )
-        }
-    }
-
-    private fun restore(activity: Activity, window: Window) {
-        val state = STATES.remove(activity) ?: return
-        try {
-            val decor = window.getDecorView()
-            if (decor != null) {
-                decor.setSystemUiVisibility(state.systemUiVisibility)
-                val content = decor.findViewById<View>(android.R.id.content)
-                if (content != null) {
-                    content.setOnApplyWindowInsetsListener(null)
-                    content.requestApplyInsets()
-                }
-            }
-            if (state.drawsSystemBarBackgrounds) {
-                window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
-            } else {
-                window.clearFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
-            }
-            if (state.translucentNavigation) {
-                window.addFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION)
-            } else {
-                window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION)
-            }
-            window.setNavigationBarColor(state.navigationBarColor)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                window.setNavigationBarDividerColor(state.navigationBarDividerColor)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                window.setNavigationBarContrastEnforced(state.navigationBarContrastEnforced)
-            }
-        } catch (t: Throwable) {
-            LiquidGlassLog.logErr(
-                WindowImmersiveController::class.java.simpleName, t
-            )
+            logErr(t)
         }
     }
 
@@ -191,6 +156,14 @@ internal object WindowImmersiveController {
             val m = drawer.javaClass
                 .getMethod("setStatusBarBackgroundColor", Int::class.javaPrimitiveType)
             m.invoke(drawer, Color.TRANSPARENT)
+        } catch (ignored: Throwable) {
+        }
+    }
+
+    private fun logErr(t: Throwable) {
+        Log.e("BetterHeybox", "WindowImmersiveController", t)
+        try {
+            LogRecorder.record(Log.ERROR, "BetterHeybox", "WindowImmersiveController: $t", t)
         } catch (ignored: Throwable) {
         }
     }

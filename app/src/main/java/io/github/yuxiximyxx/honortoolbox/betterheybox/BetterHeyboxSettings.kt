@@ -20,7 +20,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import com.better.heybox.App
-import com.better.heybox.GlassProvider
 import io.github.yuxiximyxx.honortoolbox.libraryplus.ui.LocalLpBottomInset
 import io.github.yuxiximyxx.honortoolbox.libraryplus.ui.MiuixPage
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -48,6 +47,10 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * 推送/导入关注与话题搜索、游戏库与消息入口的勾选器、评论
  * 长按面板按钮管理、视频保存位置与配置/日志的导入导出、
  * 各诊断行。本页以说明文字标注去向。
+ *
+ * v1.10.0：按小乐定案去掉「液态玻璃」「底部导航栏」两组，
+ * 小黑盒底栏今后由 LiquidTab 模块统一接管；软件内面板的
+ * 同名两组同步去除（见 SettingsEntryHook）。
  */
 private class EditReq(
     val key: String,
@@ -227,77 +230,6 @@ internal fun BetterHeyboxScreen(
             item {
                 Card(Modifier.padding(horizontal = 12.dp).fillMaxWidth()) {
                     HeySwitch("自动清理失效收藏", "打开收藏列表发现失效内容时自动清理", App.KEY_FAVOUR_AUTO_CLEAN, bump)
-                }
-            }
-
-            group("液态玻璃")
-            item {
-                Card(Modifier.padding(horizontal = 12.dp).fillMaxWidth()) {
-                    val provider = HeyboxSettingsStore.string(context, App.KEY_GLASS_PROVIDER)
-                    val hbmodReady = GlassProvider.isHbmodInstalled(context) ||
-                        provider == GlassProvider.PROVIDER_HBMOD
-                    if (hbmodReady) {
-                        HeyChoice(
-                            "液态玻璃提供方",
-                            "底栏玻璃的实现来源",
-                            currentLabel = {
-                                if (HeyboxSettingsStore.string(context, App.KEY_GLASS_PROVIDER) ==
-                                    GlassProvider.PROVIDER_HBMOD
-                                ) "小黑盒液态玻璃模块" else "BetterHeybox"
-                            },
-                            open = {
-                                choiceReq = ChoiceReq(
-                                    title = "液态玻璃提供方",
-                                    labels = listOf("BetterHeybox", "小黑盒液态玻璃模块"),
-                                    currentIndex = if (provider == GlassProvider.PROVIDER_HBMOD) 1 else 0,
-                                    onPick = { index ->
-                                        HeyboxSettingsStore.putString(
-                                            context, App.KEY_GLASS_PROVIDER,
-                                            if (index == 1) GlassProvider.PROVIDER_HBMOD
-                                            else GlassProvider.PROVIDER_OWN,
-                                        )
-                                        bump()
-                                    },
-                                )
-                            },
-                        )
-                    }
-                    HeySwitch("液态玻璃底栏", "底栏显示液态玻璃", App.KEY_LIQUID_GLASS, bump)
-                    HeySwitch("沉浸式小白条", "底栏延伸至手势区域", App.KEY_GLASS_IMMERSIVE, bump)
-                    HeySwitch("自适应反色", "文字图标随背景反色", App.KEY_GLASS_ADAPTIVE, bump)
-                    HeySwitch("加长选中 Tab", "隐藏标签后选中项加长，底栏随可见数量收缩", App.KEY_GLASS_FIT_TABS, bump)
-                    HeySwitch("搜索按钮进底栏", "把搜索入口放进玻璃底栏", App.KEY_GLASS_SEARCH_IN_BAR, bump)
-                    HeyText("暗色模式底色", "例如 #000000", App.KEY_GLASS_DARK_COLOR, "颜色值", false, { editReq = it }, bump)
-                    HeyText("暗色模式不透明度", "5–98 的百分比", App.KEY_GLASS_DARK_ALPHA, "百分比（数字）", false, { editReq = it }, bump)
-                    HeyText("亮色模式底色", "例如 #FFFFFF", App.KEY_GLASS_LIGHT_COLOR, "颜色值", false, { editReq = it }, bump)
-                    HeyText("亮色模式不透明度", "5–98 的百分比", App.KEY_GLASS_LIGHT_ALPHA, "百分比（数字）", false, { editReq = it }, bump)
-                    HeyText("玻璃条高度", "0 自动，或 51–99 dp", App.KEY_GLASS_BAR_HEIGHT, "高度（数字）", false, { editReq = it }, bump)
-                    HeyText("距屏幕底部", "0–40 dp", App.KEY_GLASS_BAR_OFFSET, "距离（数字）", false, { editReq = it }, bump)
-                    HeyText("左右边距", "玻璃条两侧边距 dp", App.KEY_GLASS_SIDE_MARGIN, "边距（数字）", false, { editReq = it }, bump)
-                    HeyText("玻璃条宽度模式", "玻璃条宽度模式代码", App.KEY_GLASS_BAR_WIDTH_MODE, "宽度模式", false, { editReq = it }, bump)
-                    HeyText("玻璃条宽度百分比", "宽度百分比（数字）", App.KEY_GLASS_BAR_WIDTH_PCT, "百分比（数字）", false, { editReq = it }, bump)
-                    HeyText("Tab 宽度百分比", "单个 Tab 宽度百分比（数字）", App.KEY_GLASS_TAB_WIDTH_PCT, "百分比（数字）", false, { editReq = it }, bump)
-                    HeyText("玻璃条布局", "布局代码", App.KEY_GLASS_BAR_LAYOUT, "布局", false, { editReq = it }, bump)
-                    HeyText("选中 Tab 颜色", "例如 #FFFFFF", App.KEY_GLASS_TAB_SELECT_COLOR, "颜色值", false, { editReq = it }, bump)
-                    HeyText("选中 Tab 不透明度", "百分比（数字）", App.KEY_GLASS_TAB_SELECT_ALPHA, "百分比（数字）", false, { editReq = it }, bump)
-                    HeyText("Tab 顺序", "底栏 Tab 的顺序代码", App.KEY_GLASS_TAB_ORDER, "顺序", false, { editReq = it }, bump)
-                    Text(
-                        "玻璃条的拖动调节面板在小黑盒内的设置面板里（「玻璃条宽度」一项）。",
-                        modifier = Modifier.padding(16.dp),
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        style = MiuixTheme.textStyles.body2,
-                    )
-                }
-            }
-
-            group("底部导航栏")
-            item {
-                Card(Modifier.padding(horizontal = 12.dp).fillMaxWidth()) {
-                    HeySwitch("禁止底栏热更新", "保留已有底栏策略和图标；仅支持 1.3.400 (1149) 和 1.3.401 (1150)，重启生效", App.KEY_BLOCK_BOTTOM_TAB_UPDATE, bump)
-                    HeySwitch("隐藏「发现」", "重启小黑盒生效", App.KEY_HIDE_TAB_HOME, bump)
-                    HeySwitch("隐藏「游戏库」", "重启小黑盒生效", App.KEY_HIDE_TAB_HOT, bump)
-                    HeySwitch("隐藏「社区」", "重启小黑盒生效", App.KEY_HIDE_TAB_GAME, bump)
-                    HeySwitch("隐藏「加号」", "重启小黑盒生效", App.KEY_HIDE_ADD, bump)
                 }
             }
 
