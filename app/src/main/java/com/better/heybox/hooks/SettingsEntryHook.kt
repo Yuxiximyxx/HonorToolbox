@@ -4249,8 +4249,6 @@ class SettingsEntryHook(private val module: MainModule) {
         @Volatile
         private var sPendingPick: PickCallback? = null
 
-        @Volatile
-
         private val BASE_GROUPS: Array<SettingsGroup> = arrayOf(
             SettingsGroup(
                 "广告过滤", arrayOf(
