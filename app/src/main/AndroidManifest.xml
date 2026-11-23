@@ -163,6 +163,16 @@
             android:authorities="io.github.yuxiximyxx.honortoolbox.wetypeglass"
             android:exported="true" />
 
+        <!-- 锁屏快捷面板的配置 Provider（v1.9.0，LockPanel 合
+             入）：hook 进程（SystemUI）经 query 拉 Cfg.KEYS 全
+             键值（原 CfgProvider 的 MatrixCursor 范式），数据
+             源是工具箱镜像偏好 lockpanel_settings；authority
+             与其余四个错开。 -->
+        <provider
+            android:name=".lockpanel.LockPanelConfigProvider"
+            android:authorities="io.github.yuxiximyxx.honortoolbox.lockpanel"
+            android:exported="true" />
+
         <!-- Xposed Module 声明（传统 API） -->
         <meta-data
             android:name="xposedmodule"

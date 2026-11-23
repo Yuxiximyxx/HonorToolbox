@@ -8,6 +8,7 @@ import de.robv.android.xposed.callbacks.XC_InitPackageResources
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 import io.github.yuxiximyxx.honortoolbox.betterheybox.BetterHeyboxHook
 import io.github.yuxiximyxx.honortoolbox.libraryplus.hook.LibraryPlusHook
+import io.github.yuxiximyxx.honortoolbox.lockpanel.LockPanelHook
 import io.github.yuxiximyxx.honortoolbox.magicpods.hook.MagicPodsHook
 import io.github.yuxiximyxx.honortoolbox.magicxm4.hook.MagicXm4Hook
 import io.github.yuxiximyxx.honortoolbox.navwake.NavWakeHook
@@ -49,6 +50,11 @@ import io.github.yuxiximyxx.honortoolbox.wetypeglass.WetypeGlassHook
  *   输入法玻璃（MOS液态输入，v1.8.0 合入；libxposed 现代 API
  *   经适配层译成传统 API、总开关即门控，配置走 Provider
  *   直供，见 wetypeglass/WetypeGlassHook）。
+ * - com.android.systemui（同分支追加）：锁屏快捷面板
+ *   （LockPanel，v1.9.0 合入；由 APK 反编译移植、hook 零
+ *   改，原版即无条件安装、行为由配置内 master 门控，不经
+ *   FeatureGate，配置走 Provider 直供，见
+ *   lockpanel/LockPanelHook）。
  */
 class ToolboxHook : IXposedHookLoadPackage, IXposedHookInitPackageResources {
 
@@ -83,6 +89,10 @@ class ToolboxHook : IXposedHookLoadPackage, IXposedHookInitPackageResources {
                 // MagicXM4（v1.5.0 合入）：与 MagicPods 并行装载同一
                 // 双装路径，各自按本方设备身份过滤，互不干扰
                 MagicXm4Hook.install(lpparam)
+                // 锁屏快捷面板（LockPanel 合入，v1.9.0）：原版入口
+                // 无条件安装全部 hook、idle until cfg loads，与
+                // 本分支既有 hook 并存不冲突，口径见文件头
+                LockPanelHook().handleLoadPackage(lpparam)
             }
             "com.android.bluetooth",
             "com.hihonor.audioaccessorymanager",

@@ -86,7 +86,8 @@ internal fun AboutScreen(onBack: () -> Unit) {
                             "· MagicXM4 —— 索尼 WH-1000XM4 设备中心\n" +
                             "· PalmPurify —— 掌盟净化\n" +
                             "· BetterHeybox —— 小黑盒增强\n" +
-                            "· MOS液态输入 —— 输入法玻璃（作者 熠寻，Apache-2.0）",
+                            "· MOS液态输入 —— 输入法玻璃（作者 熠寻，Apache-2.0）\n" +
+                            "· LockPanel —— 锁屏快捷面板（作者 chaosz，由 APK 反编译移植）",
                         fontSize = 13.sp,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),

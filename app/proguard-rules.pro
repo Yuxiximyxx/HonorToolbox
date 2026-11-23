@@ -39,3 +39,8 @@
 # （wetypeglass）含 Manifest 声明的 Provider，一并保留
 -keep class com.superboyyy.mosinputglass.** { *; }
 -keep class io.github.yuxiximyxx.honortoolbox.wetypeglass.** { *; }
+
+# LockPanel（v1.9.0 合入）：反编译移植树（lockpanel 子包）
+# 整包保留——hook 类在 SystemUI 进程被装载、大量反射访问
+# 宿主成员，Provider 在 Manifest 里以类名声明
+-keep class io.github.yuxiximyxx.honortoolbox.lockpanel.** { *; }

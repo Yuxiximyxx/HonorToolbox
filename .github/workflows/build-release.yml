@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.8.2-release.apk
+          cp "$SRC" dist/HonorToolbox-1.9.0-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.8.2-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.9.0-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,53 +66,64 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.8.2
-          name: 荣耀工具箱 1.8.2
+          tag_name: v1.9.0
+          name: 荣耀工具箱 1.9.0
           body: |
-            ## 荣耀工具箱 1.8.2（修快服务手势改向闲置后首击失效）
+            ## 荣耀工具箱 1.9.0（合入 LockPanel 锁屏快捷面板）
 
-            ### 定案（真机诊断日志全量分析）
+            ### 合入内容
 
-            快服务改向每次手势现读配置（Provider →
-            Settings.Global → 文件，无缓存）。失效样本
-            全部是「HIT gesture but config unreadable
-            (source=none) -> PASS」，且都落在快服务进程
-            刚重启的首次手势上：新进程首击时工具箱
-            Provider 进程冷启动未就绪，Global 从未写
-            成功、文件通道快服务又无读权限，三路皆空
-            直接放行进了快服务；同一进程约 10 秒后的
-            手势无任何人为干预即自愈。体感上的「闲置
-            一段时间后第一次用就进快服务、重启快服务
-            后正常」正是进程被系统回收后新进程首击
-            中招。
+            把 LockPanel（作者 chaosz，「Magic OS 锁屏快捷
+            面板」v1.20）合进工具箱：接管锁屏底部快捷面板
+            （SystemUI 的 ToolBox/Magazine 锁屏体系）——控制
+            面板能否上划呼出（跟随系统 / 强制允许 / 强制
+            禁止）、隐藏「换壁纸 / 开启杂志锁屏」文字、5 个
+            快捷槽位的图标与点击动作替换（内置录音机 / 计
+            算器 / 手电筒 / 时钟 / 扫描与相机免解锁直开，
+            也可换成任意应用或指定 Activity）。
 
-            ### 修法（hook 侧三层兜底，只动 quickgesture）
+            原模块只有 APK、无公开源码，本版以反编译代码
+            为唯一依据移植：全部 hook 落点与逻辑零改（仅
+            两处 jadx 反编译伪影做了语义等价的最小修复，
+            见源码头注），13 个配置键的键名、默认值、取值
+            格式逐字不变。
 
-            1. **最后成功配置缓存**：进程内缓存最后一
-               次成功读到的配置，任一通道读成功即刷新；
-               三路皆空时先用缓存判定（diag 来源记
-               cache），不再直接放行。缓存只存进程内，
-               进程重启即清。
-            2. **首次失败延迟重试**：三路皆空且缓存也
-               空时，放行前同步延迟约 400ms 重读一次
-               Provider（来源记 provider(retry)），给
-               Provider 进程冷启动留时间；仍失败才
-               放行。总阻塞半秒级封顶。
-            3. **安装后种子读**：安装完成后起后台线程，
-               在约 1s、3s 各做一次带宿主 Context 的
-               读取预热缓存（安装时刻宿主 Application
-               未就绪、自检读恒落空的老形态由此补上），
-               种子读结果与来源都记进诊断日志。
+            ### 配置通道（按工具箱范式适配）
 
-            diag 来源枚举扩展 cache / provider(retry)
-            两种新值，其余文案格式不变。其它功能零改。
+            - Provider authority 改为
+              io.github.yuxiximyxx.honortoolbox.lockpanel，
+              数据源为工具箱镜像偏好 lockpanel_settings，
+              SystemUI 侧仍经 query + ContentObserver +
+              CFG_CHANGED 广播（action 改工具箱包名前缀）
+              拉取与感知变化，改动即时生效、无需重启。
+            - 原独立版配置**不迁移**：新子页首次打开按原
+              默认值整份播种。
+            - 作用域不变：宿主仍只有 com.android.systemui
+              （工具箱作用域总数仍为 17 项）。
 
-            **复验点**：装 v1.8.2 → 强停快服务 → 等一
-            段时间（或等快服务进程自然重启）后第一次
-            斜滑，应直接改向到荣耀搜索、不再先进快
-            服务；连滑多次稳定。诊断日志里新进程的
-            种子读应能看到 source=provider 的成功行，
-            首击若仍撞冷启动，应看到 provider(retry)
-            或 cache 兜底后 REDIRECT ok。
+            ### 设置界面
+
+            「系统」页新增「锁屏」分组 →「锁屏快捷面板」
+            子页（MIUIX 重排，只动呈现）：总开关、面板可
+            用性三档、隐藏切换样式、5 个槽位行（点进二级
+            编辑：图标选择器带搜索与原厂图标目录、动作选
+            择器含内置动作 / 应用列表 / 指定 Activity 输
+            入）、恢复默认。原版的重启 SystemUI 按钮不另
+            造，复用首页既有入口。
+
+            ### 随带更新（小乐追加）
+
+            - 首页「已启用功能」计数把锁屏快捷面板计入：
+              计数口径 4 → 5（分母同步改 5）。
+            - 「全部作用域」页新增「锁屏」分组，含
+              com.android.systemui「锁屏快捷面板」一行，
+              与通知中心主题、长按唤醒等 SystemUI 行并列，
+              批量重启按包名去重、SystemUI 仍只重启一次。
+
+            **复验点**：装 v1.9.0 后先停用独立版 LockPanel
+            （防双重 hook）；在新子页把某个槽位动作换成计
+            算器，锁屏划出面板点它验证；面板模式切「强制
+            禁止」应划不出面板；首页已启用功能数在打开锁
+            屏快捷面板总开关后应 +1。
 
           files: dist/*.apk

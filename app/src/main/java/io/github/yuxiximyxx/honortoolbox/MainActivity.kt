@@ -127,6 +127,7 @@ import io.github.yuxiximyxx.honortoolbox.nighticon.NightIconScreen
 import io.github.yuxiximyxx.honortoolbox.nighticon.NightIconStore
 import io.github.yuxiximyxx.honortoolbox.quickgesture.ConfigWriter
 import io.github.yuxiximyxx.honortoolbox.quickgesture.GestureConfig
+import io.github.yuxiximyxx.honortoolbox.lockpanel.LockPanelScreen
 import io.github.yuxiximyxx.honortoolbox.quickgesture.QuickGestureScreen
 import io.github.yuxiximyxx.honortoolbox.shadeclock.ShadeSettingsScreen
 import io.github.yuxiximyxx.honortoolbox.shadeclock.ThemeStore
@@ -351,8 +352,8 @@ class MainActivity : ComponentActivity() {
 /** 底栏四栏（v1.2.0）。 */
 private enum class ToolboxTab { Home, System, Apps, Settings }
 
-/** 「系统」页内部页：分组总览 / 四个功能的完整设置子页。 */
-private enum class SystemPage { Root, QuickGesture, NavWake, Shade, NightIcon, LibraryPlus, HonorSearch }
+/** 「系统」页内部页：分组总览 / 各功能的完整设置子页。 */
+private enum class SystemPage { Root, QuickGesture, NavWake, Shade, LockPanel, NightIcon, LibraryPlus, HonorSearch }
 
 /** 「应用」页内部页：总览 / 掌盟净化（v1.6.0）/ 小黑盒增强（v1.7.0）/ 输入法玻璃（v1.8.0）设置子页。 */
 private enum class AppsPage { Root, PalmPurify, Heybox, WetypeGlass }
@@ -548,6 +549,7 @@ private fun ToolboxHost(
                     onOpenQuickGesture = { systemPage = SystemPage.QuickGesture },
                     onOpenNavWake = { systemPage = SystemPage.NavWake },
                     onOpenShade = { systemPage = SystemPage.Shade },
+                    onOpenLockPanel = { systemPage = SystemPage.LockPanel },
                     onOpenNightIcon = { systemPage = SystemPage.NightIcon },
                     onOpenLibraryPlus = { systemPage = SystemPage.LibraryPlus },
                     onOpenHonorSearch = { systemPage = SystemPage.HonorSearch },
@@ -572,6 +574,10 @@ private fun ToolboxHost(
                 )
                 SystemPage.Shade -> ShadeSettingsScreen(
                     onExit = { systemPage = SystemPage.Root },
+                    bottomInset = bottomInset,
+                )
+                SystemPage.LockPanel -> LockPanelScreen(
+                    onBack = { systemPage = SystemPage.Root },
                     bottomInset = bottomInset,
                 )
                 SystemPage.LibraryPlus -> LibraryPlusScreen(
@@ -1230,6 +1236,7 @@ private fun HomeScreen(
         state.navwakeEnabled,
         state.shadeclockEnabled,
         state.nighticonEnabled,
+        state.lockpanelEnabled,
     ).count { it }
     Scaffold(
         containerColor = MiuixTheme.colorScheme.surface,
@@ -1329,7 +1336,7 @@ private fun HomeScreen(
                                     fontWeight = FontWeight.Bold,
                                 )
                                 Text(
-                                    text = " / 4",
+                                    text = " / 5",
                                     fontSize = 13.sp,
                                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                 )
@@ -1552,11 +1559,13 @@ private data class ScopeGroup(val title: String, val hosts: List<ScopeHost>)
 
 /**
  * 分组与宿主全清单。数据源 = 清单里的 xposedscope 全量
- * 16 项去掉工具箱自身（自身包名只是激活自检标记、不是任何
- * 功能的 hook 宿主，不列），其余 15 个宿主按功能分组；同一
+ * 17 项去掉工具箱自身（自身包名只是激活自检标记、不是任何
+ * 功能的 hook 宿主，不列），其余 16 个宿主按功能分组；同一
  * 宿主被多个功能用时在各组里都列（药师同款做法）：
  * - 通知中心主题：systemui 本体 + launcher 只读探针
  *   （ShadeClockHook 的两个分发分支）；
+ * - 锁屏：锁屏快捷面板（LockPanel，v1.9.0 合入）的
+ *   systemui 本体；
  * - 手势与唤醒：快服务改向的 servicecenter + 长按唤醒的
  *   systemui 两个包名候选与 magicvoice/brain（后两者只在
  *   探针模式下装 hook、probeOnly 标记，页面不显示）；
@@ -1575,6 +1584,12 @@ private val SCOPE_GROUPS: List<ScopeGroup> = listOf(
         listOf(
             ScopeHost("com.android.systemui", "通知中心主题"),
             ScopeHost("com.hihonor.android.launcher", "通知中心主题 · 桌面只读探针"),
+        ),
+    ),
+    ScopeGroup(
+        "锁屏",
+        listOf(
+            ScopeHost("com.android.systemui", "锁屏快捷面板"),
         ),
     ),
     ScopeGroup(
@@ -1900,6 +1915,7 @@ private fun SystemScreen(
     onOpenQuickGesture: () -> Unit,
     onOpenNavWake: () -> Unit,
     onOpenShade: () -> Unit,
+    onOpenLockPanel: () -> Unit,
     onOpenNightIcon: () -> Unit,
     onOpenLibraryPlus: () -> Unit,
     onOpenHonorSearch: () -> Unit,
@@ -1959,6 +1975,18 @@ private fun SystemScreen(
                         checked = state.shadeclockEnabled,
                         onCheckedChange = onToggleShade,
                         onClick = onOpenShade,
+                    )
+                }
+
+                SmallTitle(
+                    text = "锁屏",
+                    insideMargin = PaddingValues(start = 4.dp, top = 16.dp),
+                )
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    SuperArrow(
+                        title = "锁屏快捷面板",
+                        summary = "锁屏底部快捷面板的呼出控制与 5 个快捷槽位自定义",
+                        onClick = onOpenLockPanel,
                     )
                 }
 
@@ -2336,6 +2364,8 @@ private data class HomeState(
     val quickgestureEnabled: Boolean = false,
     val quickgestureSummary: String = "把底角斜滑手势改成打开自选应用",
     val nighticonEnabled: Boolean = false,
+    /** 锁屏快捷面板总开关（v1.9.0 合入 LockPanel；镜像偏好 lockpanel_settings 的 master 键）。 */
+    val lockpanelEnabled: Boolean = false,
 )
 
 private fun loadHomeState(context: Context): HomeState {
@@ -2355,12 +2385,14 @@ private fun loadHomeState(context: Context): HomeState {
         "当前目标：$label"
     }
     val niPrefs = context.getSharedPreferences("nighticon_settings", Context.MODE_PRIVATE)
+    val lpPrefs = context.getSharedPreferences("lockpanel_settings", Context.MODE_PRIVATE)
     return HomeState(
         shadeclockEnabled = features[FeatureGate.SHADE_CLOCK] ?: true,
         navwakeEnabled = NavWakeStore.readEnabled(context),
         quickgestureEnabled = qgEnabled,
         quickgestureSummary = qgSummary,
         nighticonEnabled = niPrefs.getBoolean("enabled", false),
+        lockpanelEnabled = lpPrefs.getBoolean("master", false),
     )
 }
 
