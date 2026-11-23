@@ -180,7 +180,9 @@ import top.yukonga.miuix.kmp.utils.scrollEndHaptic
  * 底栏四栏「首页 / 系统 / 应用 / 设置」。
  *
  * - 首页：纯状态总览（已启用功能数、机型、系统、版本，全部
- *   是真能读到的数据）+「重启作用域」四行直接列在页内点行
+ *   是真能读到的数据）+「重启作用域」三行直接列在页内点行
+ *   （v1.7.3 按目标去重：原「重启长按导航条唤醒」与「重启
+ *   系统界面」是同一个动作、独立行已删并入其副文案）
  *   执行——v1.0.1 起放在右上角按钮/底部弹窗里的重启集合
  *   本版起只剩首页这一处入口，全应用再无第二个。
  * - 系统：现有全部荣耀功能只在这里出现一次，按组排（手势
@@ -239,9 +241,16 @@ class MainActivity : ComponentActivity() {
         // 全应用沉浸（v1.2.3，泥坛 MainActivity 同款断言）：
         // 状态栏与系统导航条全透明、内容铺到屏幕物理底边，
         // 悬浮底栏浮在内容之上采样真内容，不再有实色黑带。
-        // 各页顶部避让由 miuix Scaffold 的 systemBars
-        // insets 处理（其 contentWindowInsets 默认含
-        // systemBars），顶栏不会顶进状态栏。
+        // 顶部避让由各页 TopAppBar 自身承担（miuix 的
+        // TopAppBar 内部自带 systemBars 顶部 windowInsets
+        // Padding，不会顶进状态栏）；各页 Scaffold 的
+        // contentWindowInsets 一律清零（v1.7.3）——其默认
+        // 含 systemBars 时 innerPadding 会把整个内容视口
+        // 抬到导航条上方，屏幕底部留一条只有 containerColor
+        // 的死带、内容永远滚不到物理底边，正是此前连着三轮
+        // 「一级页没沉浸」的那条（窗口层透明与根部铺色都
+        // 治不到它）。列表内部的 bottomInset 滚动留白与此
+        // 无关、保留不动。
         enableEdgeToEdge()
         WindowCompat.setDecorFitsSystemWindows(window, false)
         @Suppress("DEPRECATION")
@@ -1192,7 +1201,7 @@ private fun FloatingGlassBar(
  * v1.2.1 点名要的）。其下两张并排小卡（已启用功
  * 能数、工具箱版本）；再下是「本机信息」卡（机型/系统版
  * 本/Android 版本/内核版本，全是真读的系统值）；「重启
- * 作用域」四行收进一张卡、行间细分割线、点行即执行——
+ * 作用域」三行收进一张卡、行间细分割线、点行即执行——
  * 全应用唯一的重启入口（右上角按钮与底部弹窗已撤除）；
  * 底部是停用旧模块的提示卡。
  */
@@ -1218,6 +1227,7 @@ private fun HomeScreen(
     ).count { it }
     Scaffold(
         containerColor = MiuixTheme.colorScheme.surface,
+        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             SmallTopAppBar(
                 title = "荣耀工具箱",
@@ -1375,25 +1385,19 @@ private fun HomeScreen(
                 Card(modifier = Modifier.fillMaxWidth()) {
                     RestartRow(
                         title = "重启系统界面",
-                        summary = "通知中心主题的改动靠它生效",
-                        onClick = onRestartSystemUi,
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    RestartRow(
-                        title = "重启长按导航条唤醒",
-                        summary = "和「重启系统界面」是同一个动作，长按唤醒的开关改动靠它生效",
+                        summary = "通知中心主题、长按唤醒的改动靠它生效",
                         onClick = onRestartSystemUi,
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     RestartRow(
                         title = "重启桌面",
-                        summary = "图标日夜切换的改动靠它生效",
+                        summary = "图标日夜切换、资源库桌面部分的改动靠它生效",
                         onClick = onRestartLauncher,
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     RestartRow(
                         title = "强停快服务",
-                        summary = "快服务手势改向首次启用作用域后点它",
+                        summary = "快服务改向的改动靠它生效",
                         onClick = onForceStopServiceCenter,
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
@@ -1610,7 +1614,7 @@ private fun scopeHostLabel(context: Context, pkg: String): String? = runCatching
 }.getOrNull()
 
 /**
- * 重启单个宿主（与首页四行快捷重启同一套通道）：
+ * 重启单个宿主（与首页三行快捷重启同一套通道）：
  * - 系统界面走 restart.txt 令牌（SystemUI 看守自杀重拉，
  *   不依赖 root，与「重启系统界面」行同机制）；
  * - 桌面首选 root 强停、兜底日夜图标的 restart_token
@@ -1666,6 +1670,7 @@ private fun ScopeRestartScreen(onBack: () -> Unit, bottomInset: Dp = 0.dp) {
 
     Scaffold(
         containerColor = MiuixTheme.colorScheme.surface,
+        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             TopAppBar(
                 title = "重启作用域",
@@ -1894,6 +1899,7 @@ private fun SystemScreen(
 ) {
     Scaffold(
         containerColor = MiuixTheme.colorScheme.surface,
+        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             SmallTopAppBar(
                 title = "系统",
@@ -2014,6 +2020,7 @@ private fun AppsScreen(
 ) {
     Scaffold(
         containerColor = MiuixTheme.colorScheme.surface,
+        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             SmallTopAppBar(
                 title = "应用",
@@ -2079,6 +2086,7 @@ private fun SettingsScreen(
 ) {
     Scaffold(
         containerColor = MiuixTheme.colorScheme.surface,
+        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             SmallTopAppBar(
                 title = "设置",
