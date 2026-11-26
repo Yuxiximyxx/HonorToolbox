@@ -65,13 +65,29 @@ import java.io.File
  * 放行；同进程约 10 秒后的手势无干预自愈。故 hook 侧加
  * 三层兜底：①进程内缓存最后一次成功读到的配置，三路皆
  * 空时先用缓存判定（来源记 cache）；②缓存也空时，手势
- * 路径在放行前延迟约 400ms 重读一次 Provider（来源记
+ * 路径在放行前有界多枪重读 Provider（来源记
  * provider(retry)），给冷启动留时间；③安装后由 hook 起
  * 后台线程延迟种子读预热缓存（见 QuickGestureHook）。
  * 缓存只存进程内，进程重启即清，靠种子读补。三路只要有
  * 一路活着，读到的永远是最新配置，缓存只在全断时顶上——
  * 代价是通道全断期间改设置（尤其关开关）不即时生效，
  * 以「闲置首击不失效」的收益换，口径在此写明。
+ *
+ * 闲置首击二轮加固（v1.10.1，真机复发后复盘）：v1.8.2 上
+ * 线后闲置场景仍复发。对照旧日志（止于 1.8.1）与代码，
+ * 缺口是时序而非通道：①种子读在 handleLoadPackage 后
+ * +1s/+4s 才跑，而手势决策点（LauncherActivity.onCreate）
+ * 在进程启动后约 0.2~0.9s 就到达，决策永远跑在预热前面；
+ * ②首击重试只有固定 400ms 单枪，而旧日志显示 Provider
+ * 焐热需要约 1~2s 内多次尝试（失败与成功交错出现）。
+ * v1.10.1 改法：决策点改有界重试环
+ * [readConfigFromProviderColdStart]（总预算封顶、多枪、
+ * 每枪结果与异常经回调打日志）；hook 侧另挂宿主
+ * Application.onCreate 提前预热、二审延迟决策兜底（见
+ * QuickGestureHook）。Provider call 在冷进程里为何快速
+ * 失败（返回 null/抛异常）而非阻塞等工具箱进程起来，
+ * 旧日志未留异常痕迹、属推断；本版每枪异常类名落日志，
+ * 下轮可定案。
  */
 data class GestureConfig(
     val enabled: Boolean = false,
@@ -231,27 +247,60 @@ object ConfigStore {
         return null
     }
 
-    /** 首击重试前给 Provider 进程冷启动留的时间（毫秒）。 */
-    private const val PROVIDER_RETRY_DELAY_MS = 400L
+    /**
+     * 最近一次 Provider 读取失败的异常类名（v1.10.1）：
+     * readConfigFromProvider 的 catch 里记下，成功即清。
+     * 供重试环逐枪打日志——旧版把异常全吞了，冷进程里
+     * call 为何失败（快速返回 null 还是抛异常）无从定案，
+     * 本版起留痕。
+     */
+    @Volatile
+    var lastProviderError: String? = null
+        private set
 
     /**
-     * 兜底层二（v1.8.2）：三路皆空且缓存也空时（即
-     * [readConfig] 返回 null 的场合），延迟约 400ms 后
-     * 只重读一次 Provider 通道——新进程首击时工具箱
-     * Provider 进程多半正在被第一发 call 拉起，稍等再
-     * 读即中。读到即刷新缓存、来源记 provider(retry)；
-     * 仍失败返回 null、来源保持 none。只在手势路径调用
-     * （同步阻塞约 400ms，半秒级封顶），安装自检不走。
+     * 兜底层二（v1.10.1 升级，原 v1.8.2 单枪重试）：三路
+     * 皆空且缓存也空时（即 [readConfig] 返回 null 的场
+     * 合），在 [budgetMs] 总预算内对 Provider 通道做多
+     * 枪有界重试——旧日志实证焐热需要约 1~2s 内多次尝
+     * 试，单枪（v1.8.2 的固定 400ms 后一枪）命中率不
+     * 足。枪间睡眠 200/350/550ms 递增，总时长（含调用
+     * 耗时）到预算即停；每枪结果经 [onAttempt] 回调出
+     * 去打日志（枪号、已耗时、ok/empty/异常类名）。读
+     * 到即刷新缓存、来源记 provider(retry)；全灭返回
+     * null、来源保持 none。只在手势路径调用（同步阻塞
+     * 以预算封顶，调用方给的预算须远低于 ANR 线），安
+     * 装自检不走。
      */
-    fun readConfigFromProviderRetry(context: Context): GestureConfig? {
-        try {
-            Thread.sleep(PROVIDER_RETRY_DELAY_MS)
-        } catch (t: Throwable) {
-            return null
+    fun readConfigFromProviderColdStart(
+        context: Context,
+        budgetMs: Long,
+        onAttempt: (String) -> Unit,
+    ): GestureConfig? {
+        val startMs = System.currentTimeMillis()
+        val sleeps = longArrayOf(200L, 350L, 550L, 800L)
+        var attempt = 0
+        while (true) {
+            attempt++
+            val config = readConfigFromProvider(context)
+            val elapsed = System.currentTimeMillis() - startMs
+            if (config != null) {
+                onAttempt("provider attempt #$attempt @${elapsed}ms: ok")
+                lastReadSource = "provider(retry)"
+                return remember(config)
+            }
+            onAttempt(
+                "provider attempt #$attempt @${elapsed}ms: " +
+                    (lastProviderError?.let { "error $it" } ?: "empty")
+            )
+            val sleepMs = sleeps.getOrElse(attempt - 1) { 800L }
+            if (elapsed + sleepMs >= budgetMs) return null
+            try {
+                Thread.sleep(sleepMs)
+            } catch (t: Throwable) {
+                return null
+            }
         }
-        val config = readConfigFromProvider(context) ?: return null
-        lastReadSource = "provider(retry)"
-        return remember(config)
     }
 
     /**
@@ -270,11 +319,13 @@ object ConfigStore {
             )
             val text = bundle?.getString(PROVIDER_EXTRA_CONFIG)
             if (!text.isNullOrBlank() && text.contains("enabled=")) {
+                lastProviderError = null
                 parse(text)
             } else {
                 null
             }
         } catch (t: Throwable) {
+            lastProviderError = t.javaClass.name
             null
         }
     }

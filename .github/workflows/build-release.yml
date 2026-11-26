@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.10.0-release.apk
+          cp "$SRC" dist/HonorToolbox-1.10.1-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.10.0-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.10.1-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,65 +66,51 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.10.0
-          name: 荣耀工具箱 1.10.0
+          tag_name: v1.10.1
+          name: 荣耀工具箱 1.10.1
           body: |
-            ## 荣耀工具箱 1.10.0（应用底栏归 LiquidTab 统一接管）
+            ## 荣耀工具箱 1.10.1（修快服务改向闲置后首击失效）
 
-            ### 本版改动
+            ### 本版改动（只动快服务改向一条链，其余功能未动）
 
-            按定案把「应用」部分涉及应用自有底栏的功能全部
-            去除：掌盟与小黑盒的底栏今后由 LiquidTab 模块
-            统一控制，本模块不再触碰这两个应用的底栏。
+            现象：闲置一段时间后第一次底角斜滑又直达快
+            服务本身，重启快服务后恢复——与 2026-11-23
+            晚复发同形态，v1.8.2 的三层兜底在真机仍未
+            拦住。
 
-            ### 掌盟净化
+            复盘定案（对照旧日志与代码）：缺口是时序。
+            快服务进程被系统频繁杀重启，手势冷启进程时
+            决策点（LauncherActivity.onCreate）在进程
+            启动后约 0.2~0.9s 就到达，而 v1.8.2 的种子
+            预热在 +1s/+4s 才跑，决策永远跑在预热前面；
+            首击重试只有固定 400ms 单枪，而 Provider
+            焐热需要约 1~2s 内多次尝试。
 
-            - 删除「底栏显示」整组设置：底栏精简总闸
-              （slim_tabbar）、逐项显示开关（tab_show_*）、
-              隐藏中间加号（hide_center_btn）。
-            - hook 侧同步停止：首页处理不再套用底栏逐项
-              显隐与等权铺满、不再隐藏中间加号、不再记录
-              底栏项名单；旧配置迁移也不再导入这两个键
-              （存量键值留在 prefs 里无害、不再被读取）。
-            - 保留不动：透明沉浸（系统导航条沉浸、非应用
-              底栏）、屏蔽开屏广告、首页运营模块精简、
-              弹窗拦截、摇一摇拦截、调试日志。
+            三处补强：
 
-            ### 小黑盒增强
+            - 预热提前：hook 宿主 Application.onCreate
+              （必在 Activity.onCreate 之前、进程里第一
+              个能拿到真 Context 的点）立刻多枪预热配置
+              缓存（0/250/700/1500ms），原 1s/3s 种子
+              读保留作补枪。
+            - 决策点改有界重试环：配置三路皆空时不再
+              单枪重试，在 1.6s 预算内多枪重读
+              Provider（远低于 ANR 线，只在手势命中的
+              冷路径触发，热路径零影响），逐枪结果与异
+              常类名打进诊断日志。
+            - 二审延迟决策：读空放行时记 pending，
+              onResume 时复判一次（预算减半 0.8s、只
+              审一次）；开关关/目标未配置这类已读到配
+              置的放行不二审。
 
-            - 删除「液态玻璃」与「底部导航栏」两组设置：
-              工具箱子页与小黑盒软件内面板（两处共用同一
-              份设置定义）同步消失。
-            - hook 侧整套停止安装：液态玻璃底栏
-              （LiquidGlassBottomBarHook 与 liquidglass
-              整包实现）、底部导航隐藏（BottomTabHook）、
-              禁止底栏热更新（BottomTabUpdateHook）全部
-              移除，配置键（liquid_glass / glass_* /
-              hide_tab_* / hide_add /
-              block_bottom_tab_update）停止读取生效；
-              配置备份与镜像同步名单同步摘除这些键。
-            - 保留不动：广告过滤、发帖过滤、首页信息流、
-              评论过滤、搜索页精简、帖子详情精简、游戏库
-              精简、分享净化、收藏、复制、视频下载、截图、
-              每日任务、动态推送、通用等全部其他功能；
-              全界面系统导航条沉浸保留（改为常开、不再
-              依赖已删的 glass_immersive 键）。
-
-            ### 其他
-
-            - 输入法玻璃（wetypeglass）与工具箱自身悬浮
-              底栏不受影响；启用功能计数与全部作用域页
-              不变（掌盟/小黑盒功能本体都还在，作用域
-              总数仍 17 项）。
-            - 随带清理：去掉只服务于小黑盒玻璃底栏的
-              外部玻璃库依赖（com.github.QWEA0:
-              liquidglass）。
-
-            **复验点**：装 v1.10.0 后，掌盟净化子页应只剩
-            界面/开屏/首页/弹窗/其他五组、小黑盒增强子页
-            与小黑盒软件内面板应不再出现「液态玻璃」与
-            「底部导航栏」；两个应用的底栏外观改在
-            LiquidTab 里控制（需 LiquidTab 的掌盟/小黑盒
-            适配版）。
+            **复验点**：装 v1.10.1 后强停快服务，放置
+            一段时间（让快服务与工具箱进程都被系统回
+            收），第一次底角斜滑应直接改向到已配置的
+            目标（如荣耀搜索），不再先打开快服务本身；
+            正常点开快服务图标仍应放行进快服务。若仍
+            失效，导出 /sdcard/Download/HonorToolbox/
+            quickgesture.log：本版日志含每枪 Provider
+            尝试结果（provider attempt #n … ok/empty/
+            error 类名）与二审行，可据此定案。
 
           files: dist/*.apk

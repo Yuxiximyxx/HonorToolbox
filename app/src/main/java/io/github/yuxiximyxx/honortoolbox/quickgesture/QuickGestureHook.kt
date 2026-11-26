@@ -50,9 +50,21 @@ import java.io.File
  *
  * 放行口径（任何一条不满足都完整放行快服务原行为）：
  * from_tag 不是 "LauncherScroll"（正常点开快服务）、配置
- * 三路皆空且缓存未建、延迟重试 Provider 仍失败（v1.8.2
- * 兜底，见 ConfigStore 类注）、总开关关、目标未配置、
- * 目标启动失败。
+ * 三路皆空且缓存未建、有界重试环多枪 Provider 仍失败
+ * 且 onResume 二审仍失败（v1.10.1 兜底，见 ConfigStore
+ * 类注）、总开关关、目标未配置、目标启动失败。
+ *
+ * 闲置首击二轮加固（v1.10.1）：v1.8.2 的种子读在
+ * handleLoadPackage 后 +1s/+4s 才跑，手势冷启进程时
+ * onCreate 决策（进程启动后约 0.2~0.9s）永远跑在预热
+ * 前面；单枪 400ms 重试又不足以焐热 Provider。本版三
+ * 处补强：①hook 宿主 Application.onCreate（必在
+ * LauncherActivity.onCreate 之前）拿到真 Context 立
+ * 刻积极预热缓存（0/250/700/1500ms 多枪）；②决策点
+ * 改有界重试环（预算 1.6s、多枪、逐枪日志）；③读空
+ * 失败时不立刻定案放行，记 pending、由 onResume 二
+ * 审一次（预算减半 0.8s）——二审只对「配置读空」触
+ * 发，开关关/未配置这类已读到配置的放行不二审。
  * 诊断写 /sdcard/Download/HonorToolbox/quickgesture.log
  * （v1.6.2 起的主落点；旧路径 /sdcard/Download/
  * quickgesture_probe.log 继续双写）+ LSPosed 日志，前缀
@@ -69,6 +81,15 @@ class QuickGestureHook : IXposedHookLoadPackage {
         private const val FROM_TAG_KEY = "from_tag"
         private const val FROM_TAG_GESTURE = "LauncherScroll"
         private val LOG_FILE = File("/sdcard/Download/quickgesture_probe.log")
+
+        /** 决策点有界重试环预算（v1.10.1）：远低于 5s ANR 线。 */
+        private const val COLD_BUDGET_MS = 1_600L
+
+        /** 二审重试环预算（v1.10.1）：面板可能已露面，减半。 */
+        private const val COLD_BUDGET_DEFERRED_MS = 800L
+
+        /** pending 二审有效期（毫秒），过期丢弃不补判。 */
+        private const val PENDING_TTL_MS = 5_000L
 
         // v1.6.2：诊断主落点收进工具箱目录（与 navwake.log /
         // palmpurify.log 同处，方便一并取证）；旧路径继续双写，
@@ -97,6 +118,15 @@ class QuickGestureHook : IXposedHookLoadPackage {
         }
     }
 
+    /** Application.onCreate 预热每进程只武装一次（v1.10.1）。 */
+    private val warmArmed = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** 待二审的手势判定（v1.10.1）：读空放行时记下、二审后清。 */
+    private data class PendingGesture(val intent: Intent?, val atMs: Long)
+
+    @Volatile
+    private var pendingGesture: PendingGesture? = null
+
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         if (lpparam.packageName != TARGET_PACKAGE) return
         try {
@@ -107,6 +137,32 @@ class QuickGestureHook : IXposedHookLoadPackage {
                 diag("install FAILED: $LAUNCHER_ACTIVITY not found in $TARGET_PACKAGE")
                 return
             }
+            // v1.10.1 预热提前：宿主 Application.onCreate 必
+            // 在 LauncherActivity.onCreate 之前，且是进程里
+            // 第一个能拿到真 Context 的点——在这里就起积极
+            // 预热（见 warmConfigCache），把缓存建立时点从
+            // v1.8.2 的「安装后 +1s 种子」提前到决策之前。
+            // 挂基类 Application.onCreate：子类覆写时必调
+            // super，本回调在其返回后触发；每进程只武装一次。
+            try {
+                XposedHelpers.findAndHookMethod(
+                    "android.app.Application", lpparam.classLoader, "onCreate",
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            try {
+                                val app = param.thisObject as? Context ?: return
+                                if (warmArmed.compareAndSet(false, true)) {
+                                    warmConfigCache(app)
+                                }
+                            } catch (t: Throwable) {
+                                diag("Application.onCreate warm error: ${t.javaClass.name}: ${t.message}")
+                            }
+                        }
+                    },
+                )
+            } catch (t: Throwable) {
+                diag("Application.onCreate hook FAILED: ${t.javaClass.name}: ${t.message}")
+            }
             XposedHelpers.findAndHookMethod(
                 clazz, "onCreate", Bundle::class.java,
                 object : XC_MethodHook() {
@@ -116,6 +172,37 @@ class QuickGestureHook : IXposedHookLoadPackage {
                             tryRedirect(activity, activity.intent, "onCreate")
                         } catch (t: Throwable) {
                             diag("onCreate hook error: ${t.javaClass.name}: ${t.message}")
+                        }
+                    }
+                },
+            )
+            // v1.10.1 二审：onCreate/onNewIntent 因配置读空
+            // 放行时记下的 pending，在 onResume 时重跑一次
+            // 判定（此时预热与重试环多半已把缓存建好）。
+            // 只审一次、过期（>5s）丢弃；二审自身不再记
+            // pending，不循环。
+            XposedHelpers.findAndHookMethod(
+                clazz, "onResume",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        try {
+                            val activity = param.thisObject as? Activity ?: return
+                            val pending = pendingGesture ?: return
+                            if (System.currentTimeMillis() - pending.atMs > PENDING_TTL_MS) {
+                                pendingGesture = null
+                                diag("onResume deferred decision expired -> drop")
+                                return
+                            }
+                            pendingGesture = null
+                            diag("onResume deferred decision: retrying gesture decision")
+                            tryRedirect(
+                                activity, pending.intent,
+                                "onResume(deferred)",
+                                coldBudgetMs = COLD_BUDGET_DEFERRED_MS,
+                                allowDefer = false,
+                            )
+                        } catch (t: Throwable) {
+                            diag("onResume hook error: ${t.javaClass.name}: ${t.message}")
                         }
                     }
                 },
@@ -168,7 +255,7 @@ class QuickGestureHook : IXposedHookLoadPackage {
             )
             // v1.8.2 种子读：handleLoadPackage 时刻宿主
             // Application 多半还没就绪、自检读恒走文件通道
-            // 落空，缓存建不起来，新进程首击只能靠 400ms
+            // 落空，缓存建不起来，新进程首击只能靠决策点
             // 重试硬扛。这里起后台线程在约 1s、3s 各补读
             // 一次（此时 currentApplication 应已就绪），把
             // 缓存提前预热好，首击直接命中缓存/正常通道。
@@ -177,6 +264,52 @@ class QuickGestureHook : IXposedHookLoadPackage {
         } catch (t: Throwable) {
             diag("install FAILED: ${t.javaClass.name}: ${t.message}")
         }
+    }
+
+    /**
+     * 积极预热（v1.10.1）：宿主 Application 就绪即起后
+     * 台线程，按 0/250/700/1500ms 节奏多枪 [ConfigStore]
+     * 全通道读取（readConfig 成功即刷新进程内缓存），
+     * 抢在 LauncherActivity.onCreate 决策点之前把缓存
+     * 建好。读到即停（后续枪不再打）；全灭只 diag 留
+     * 痕。原 v1.8.2 的 1s/3s 种子读保留作补枪（宿主
+     * Application 钩子万一没装上时仍有预热）。
+     */
+    private fun warmConfigCache(appContext: Context) {
+        val worker = Thread {
+            val delays = longArrayOf(0L, 250L, 450L, 800L)
+            var elapsed = 0L
+            for (delayMs in delays) {
+                if (delayMs > 0) {
+                    try {
+                        Thread.sleep(delayMs)
+                    } catch (t: Throwable) {
+                        return@Thread
+                    }
+                    elapsed += delayMs
+                }
+                try {
+                    val warmed = ConfigStore.readConfig(appContext)
+                    if (warmed != null) {
+                        diag(
+                            "config warm @~${elapsed}ms: enabled=${warmed.enabled} " +
+                                "mode=${warmed.mode} pkg=${warmed.pkg} " +
+                                "(source=${ConfigStore.lastReadSource})"
+                        )
+                        return@Thread
+                    }
+                } catch (t: Throwable) {
+                    diag("config warm @~${elapsed}ms error: ${t.javaClass.name}: ${t.message}")
+                }
+            }
+            diag(
+                "config warm: all attempts unreadable " +
+                    "(source=${ConfigStore.lastReadSource})"
+            )
+        }
+        worker.isDaemon = true
+        worker.name = "QuickGestureWarm"
+        worker.start()
     }
 
     /**
@@ -245,7 +378,13 @@ class QuickGestureHook : IXposedHookLoadPackage {
      * 已 finish）；false 表示放行原行为，本函数不留副作用
      * （目标启动失败时不 finish，快服务照常打开）。
      */
-    private fun tryRedirect(activity: Activity, intent: Intent?, source: String): Boolean {
+    private fun tryRedirect(
+        activity: Activity,
+        intent: Intent?,
+        source: String,
+        coldBudgetMs: Long = COLD_BUDGET_MS,
+        allowDefer: Boolean = true,
+    ): Boolean {
         val fromTag = try {
             intent?.getStringExtra(FROM_TAG_KEY)
         } catch (t: Throwable) {
@@ -257,19 +396,32 @@ class QuickGestureHook : IXposedHookLoadPackage {
         }
         var config = ConfigStore.readConfig(activity)
         if (config == null) {
-            // v1.8.2 兜底：三路皆空且缓存也空，多半是新进程
-            // 首击撞上 Provider 冷启动——放行前延迟约
-            // 400ms 重读一次 Provider（命中时
-            // lastReadSource=provider(retry)），仍空才放行。
-            // readConfig 内部已有缓存兜底，能走到这里说明
-            // 缓存未建，故重试是最后一道。
-            config = ConfigStore.readConfigFromProviderRetry(activity)
+            // v1.10.1 兜底（原 v1.8.2 单枪重试升级）：三路
+            // 皆空且缓存也空，多半是新进程首击撞上 Provider
+            // 冷启动——放行前在预算内多枪重读 Provider
+            // （逐枪日志，命中时 lastReadSource=
+            // provider(retry)）。readConfig 内部已有缓存兜
+            // 底，能走到这里说明缓存未建，故重试环是当场
+            // 最后一道；再失败且允许二审时记 pending 交
+            // onResume 复判，不在本点定案。
+            config = ConfigStore.readConfigFromProviderColdStart(
+                activity, coldBudgetMs,
+            ) { line -> diag("$source $line") }
         }
         if (config == null) {
-            diag(
-                "$source HIT gesture but config unreadable " +
-                    "(source=${ConfigStore.lastReadSource}) -> PASS"
-            )
+            if (allowDefer) {
+                pendingGesture = PendingGesture(intent, System.currentTimeMillis())
+                diag(
+                    "$source HIT gesture but config unreadable " +
+                        "(source=${ConfigStore.lastReadSource}) " +
+                        "-> PASS for now, deferred to onResume"
+                )
+            } else {
+                diag(
+                    "$source HIT gesture but config unreadable " +
+                        "(source=${ConfigStore.lastReadSource}) -> PASS"
+                )
+            }
             return false
         }
         if (!config.enabled) {
