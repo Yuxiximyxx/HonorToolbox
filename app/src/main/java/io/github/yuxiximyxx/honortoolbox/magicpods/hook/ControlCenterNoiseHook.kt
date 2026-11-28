@@ -81,10 +81,13 @@ object ControlCenterNoiseHook : HookContext() {
                 //   2) magicorig_last_anc     —— 用户在 App 里设的默认档位
                 //   3) 兜底 NOISE_CANCELLATION
                 val app0 = currentApp()
+                // v1.10.2 身份门控：注入只许在我方机型已被正向识别时发生。
+                // 未识别（当前连的是别家耳机/从未连过）→ 不注入、保持原返回，
+                // 免得别家耳机的卡被塞进我方机型的模式集（串扰真机实证）。
+                val profile = PodIdentity.identified(app0) ?: return@intercept orig
                 // FIX-010：荣耀的 NoiseMode 枚举里本来就有 ADAPTIVE（ordinal 3 → ncValue 3），
                 // 上游只注入了三档，Free4 补上第四档「自适应」。
                 // Air4 Pro 没有 slot 11，面板不放这一档（点了也会被映射回中档，这里直接不显示）。
-                val profile = PodIdentity.current(app0)
                 val wanted = if (profile.supportsAdaptiveAnc) {
                     setOf("NOISE_CANCELLATION", "AWARENESS", "OFF", "ADAPTIVE")
                 } else {
@@ -129,10 +132,21 @@ object ControlCenterNoiseHook : HookContext() {
             module.hook(m).intercept { chain ->
                 val deviceId = chain.args.getOrNull(0)
                 val nc = (chain.args.getOrNull(1) as? Int) ?: -1
+                // v1.10.2 身份门控：下发桥只处理我方设备（deviceId 即 MAC，
+                // 与本文件 setBatteryLevel 等 hook 同一 isOurMac 口径）。
+                // 非我方设备一律放行原 MBB 调用——此前无条件拦截把 AirPods /
+                // FreeBuds 5 卡片的降噪点击也吞进了我们的 SPP 广播（点击
+                // 无效、停用工具箱即恢复，真机实证）。
+                if (!isOurMac(deviceId?.toString())) {
+                    return@intercept chain.proceed()
+                }
                 // ncValue → 模块 status(非空 Int)：降噪=用户默认档位(5/4/3)  透传=2  关闭=1  自适应忽略
                 // ★ 必须是 Int：曾用 String 导致 bluetooth 端 getIntExtra("status",0) 读不到
                 //   （类型不符返回默认 0，0 不在映射表 → 不发 SPP 帧 → 点击无效）
-                val adaptive = PodIdentity.current(currentApp()).supportsAdaptiveAnc
+                // 机型参数在 MAC 门控之内读：优先正向识别结果，识别滞后时
+                // 回落 current()（此处设备已确认是我方，兜底不会误伤别家）。
+                val adaptive = (PodIdentity.identified(currentApp())
+                    ?: PodIdentity.current(currentApp())).supportsAdaptiveAnc
                 val status: Int = when (nc) {
                     1 -> (readLastAnc() ?: "5").toIntOrNull() ?: 5
                     2 -> 2

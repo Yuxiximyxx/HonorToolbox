@@ -1,5 +1,6 @@
 package io.github.yuxiximyxx.honortoolbox.magicpods.hook
 
+import io.github.yuxiximyxx.honortoolbox.magicpods.utils.DeviceIdentity
 import io.github.yuxiximyxx.honortoolbox.magicpods.utils.PodIdentity
 
 /**
@@ -66,6 +67,21 @@ object HonorEarphoneHook : HookContext() {
     private val RES_SNOOP_PAIR_COUNTS =
         java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>()
 
+    // ── 我方设备 MAC 门控（v1.10.2）──────────────────────────────
+    // 数据来源与 ControlCenterNoiseHook.ourMac() 同一：蓝牙进程识别命中时
+    // 写 Settings.Global[DeviceIdentity.MAC_KEY]，从未连过时回落上游常量
+    // （与 ControlCenterNoiseHook.OUR_MAC 同值）。合成类拦截只许对我方
+    // 设备做，非我方一律 proceed 放行原逻辑——此前无条件合成把任意耳机
+    // 查 SmartConnect / getDeviceInfo 的请求都答成 Free4 成功，非欢律
+    // 耳机被误接管（AirPods / FreeBuds 5 串扰真机实证）。
+    private fun ourMac(): String = runCatching {
+        val ctx = DeviceIdentity.currentApp() ?: return@runCatching ""
+        android.provider.Settings.Global.getString(ctx.contentResolver, DeviceIdentity.MAC_KEY)
+    }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() } ?: "18:5C:A1:52:10:36"
+
+    private fun isOurMac(mac: String?): Boolean =
+        mac != null && mac.equals(ourMac(), ignoreCase = true)
+
     override fun onHook() {
         Log.i(TAG, "onHook start pkg=$packageName")
 
@@ -76,6 +92,11 @@ object HonorEarphoneHook : HookContext() {
             module.hook(method).intercept { chain ->
                 val mac = chain.args.getOrNull(0) as? String
                 val cb = chain.args.getOrNull(1)
+                if (!isOurMac(mac)) {
+                    // v1.10.2 门控：非我方设备放行原逻辑，不合成成功
+                    Log.i(TAG, ">>> getSmartConnect(mac=$mac) 非我方设备 → 放行原逻辑")
+                    return@intercept chain.proceed()
+                }
                 // 反汇编确认：f4.b$a.b(Object) 是桥方法，
                 //   check-cast v1, Ljava/lang/Boolean;
                 //   invoke-virtual {v0,v1}, f4.b$a.c:(Ljava/lang/Boolean;)V
@@ -96,6 +117,12 @@ object HonorEarphoneHook : HookContext() {
             val method = findMethod(MBB_API, "getSmartConnect", cb)
             module.hook(method).intercept { chain ->
                 val cb = chain.args.getOrNull(0)
+                if (PodIdentity.identified() == null) {
+                    // v1.10.2 门控：无 MAC 可核对时，只在我方机型已被正向
+                    // 识别发布的前提下才合成，否则放行原逻辑
+                    Log.i(TAG, ">>> getSmartConnect(cb) 未正向识别到我方机型 → 放行原逻辑")
+                    return@intercept chain.proceed()
+                }
                 Log.i(TAG, ">>> getSmartConnect(cb) cb=${cb?.javaClass?.name} → 合成成功")
                 synthesizeSuccess(cb)
                 null
@@ -322,6 +349,11 @@ object HonorEarphoneHook : HookContext() {
                             Log.w(TAG, "b2.a.getDeviceInfo(mac=$mac) 字段转储失败: ${it.javaClass.simpleName}: ${it.message}")
                         }
                     }
+                    original
+                } else if (!isOurMac(mac as? String)) {
+                    // v1.10.2 门控：非我方设备保持原样（null），不合成 Free4
+                    // 的设备信息——此前任意 MAC 查不到信息都被合成成 Free4。
+                    Log.i(TAG, "b2.a.getDeviceInfo(mac=$mac) => null 非我方设备 [保持原样]")
                     original
                 } else {
                     // 实测原本恒为 null。反汇编 b2.a.d 拿到它写入的 key：

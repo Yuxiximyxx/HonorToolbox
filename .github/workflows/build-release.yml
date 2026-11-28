@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.10.1-release.apk
+          cp "$SRC" dist/HonorToolbox-1.10.2-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.10.1-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.10.2-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,51 +66,46 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.10.1
-          name: 荣耀工具箱 1.10.1
+          tag_name: v1.10.2
+          name: 荣耀工具箱 1.10.2
           body: |
-            ## 荣耀工具箱 1.10.1（修快服务改向闲置后首击失效）
+            ## 荣耀工具箱 1.10.2（修 MagicPods 串扰其他耳机）
 
-            ### 本版改动（只动快服务改向一条链，其余功能未动）
+            ### 本版改动（只动 MagicPods 身份门控，其余功能未动）
 
-            现象：闲置一段时间后第一次底角斜滑又直达快
-            服务本身，重启快服务后恢复——与 2026-11-23
-            晚复发同形态，v1.8.2 的三层兜底在真机仍未
-            拦住。
+            现象（真机实证）：AirPods、HUAWEI FreeBuds 5 连手机时，
+            设备中心展开卡片的噪声控制点了不起作用（更多设置里
+            可以），通知栏耳机通知标题还被误写成「OPPO Enco
+            Free4」；停用工具箱后全部恢复。
 
-            复盘定案（对照旧日志与代码）：缺口是时序。
-            快服务进程被系统频繁杀重启，手势冷启进程时
-            决策点（LauncherActivity.onCreate）在进程
-            启动后约 0.2~0.9s 就到达，而 v1.8.2 的种子
-            预热在 +1s/+4s 才跑，决策永远跑在预热前面；
-            首击重试只有固定 400ms 单枪，而 Provider
-            焐热需要约 1~2s 内多次尝试。
+            根因：MagicPods 的身份判定有个 Free4 兜底——当前机型
+            没被正向识别时默认当 Free4，这个显示兜底被拦截路径
+            共用了：SmartConnect 查询与设备信息合成对任意设备
+            无条件答成功、卡片降噪下发桥无条件拦截别家设备的
+            点击、通知占位文案无条件换成 Free4 名。非欢律耳机
+            就这样被当成 Free4 接管。
 
-            三处补强：
+            修法：拦截类路径一律加正向识别门控——
 
-            - 预热提前：hook 宿主 Application.onCreate
-              （必在 Activity.onCreate 之前、进程里第一
-              个能拿到真 Context 的点）立刻多枪预热配置
-              缓存（0/250/700/1500ms），原 1s/3s 种子
-              读保留作补枪。
-            - 决策点改有界重试环：配置三路皆空时不再
-              单枪重试，在 1.6s 预算内多枪重读
-              Provider（远低于 ANR 线，只在手势命中的
-              冷路径触发，热路径零影响），逐枪结果与异
-              常类名打进诊断日志。
-            - 二审延迟决策：读空放行时记 pending，
-              onResume 时复判一次（预算减半 0.8s、只
-              审一次）；开关关/目标未配置这类已读到配
-              置的放行不二审。
+            - PodIdentity 新增 identified()：只有机型已被正向
+              识别发布才返回，未识别返回 null；current() 的
+              Free4 兜底只保留给纯显示。
+            - 设备中心 SmartConnect / getDeviceInfo 合成：带
+              MAC 的只在我方 MAC 时合成，无参的只在正向识别
+              命中时合成，其余放行原逻辑。
+            - 卡片降噪下发（setNoiseCtrlMode）：只处理我方
+              MAC 的点击，别家设备放行原 MBB 调用；模式集
+              注入（fromBatteryData）未识别时不注入。
+            - SystemUI 通知占位换名：正向识别命中且我方耳机
+              当前在连才换名，未命中留系统原文案。
 
-            **复验点**：装 v1.10.1 后强停快服务，放置
-            一段时间（让快服务与工具箱进程都被系统回
-            收），第一次底角斜滑应直接改向到已配置的
-            目标（如荣耀搜索），不再先打开快服务本身；
-            正常点开快服务图标仍应放行进快服务。若仍
-            失效，导出 /sdcard/Download/HonorToolbox/
-            quickgesture.log：本版日志含每枪 Provider
-            尝试结果（provider attempt #n … ok/empty/
-            error 类名）与二审行，可据此定案。
+            Free4 被正向识别时，球位 / 卡片 / 电量 / 降噪 / EQ
+            等既有行为不变；欢律协议层零改动。
+
+            **复验点**：装 v1.10.2 后重新启用工具箱，分别连
+            AirPods、FreeBuds 5：设备中心展开卡片应能直接切
+            降噪模式，通知栏耳机通知标题应是设备本名；再连
+            Free4，设备中心球位、卡片、电量与降噪应与此前
+            一致。
 
           files: dist/*.apk

@@ -60,8 +60,25 @@ object SystemUIHeadsetIconHook : HookContext() {
         "$ls $rs"
     }.getOrDefault("左耳 --% 右耳 --%")
 
-    private fun currentDisplayName(): String =
-        runCatching { PodIdentity.current().displayName }.getOrDefault(PodProfiles.FREE4.displayName)
+    /**
+     * v1.10.2 身份门控：占位文案换名只许在我方机型已被正向识别、且我方
+     * 耳机当前在连时。此前走 current() 的 Free4 兜底：AirPods / FreeBuds 5
+     * 连着时，音频通知标题被盖成「OPPO Enco Free4」（真机串扰实证）。
+     * 连接态读跨进程桥 magicorig_connected（蓝牙进程维护、断连写 0），
+     * 不用本进程的 connectedAddresses（SystemUI 内维护不起来，v2.10.14
+     * 已实证）；两个条件都不满足返回 null，留系统原文案。
+     */
+    private fun identifiedDisplayNameOrNull(): String? {
+        val app = runCatching {
+            Class.forName("android.app.ActivityThread")
+                .getDeclaredMethod("currentApplication").invoke(null) as? android.content.Context
+        }.getOrNull() ?: return null
+        val profile = PodIdentity.identified(app) ?: return null
+        val connected = runCatching {
+            android.provider.Settings.Global.getString(app.contentResolver, "magicorig_connected")
+        }.getOrNull() == "1"
+        return if (connected) profile.displayName else null
+    }
 
     // 播控门控核对日志去重：文本+祖先链签名，只打前 20 条不同的
     private val REWRITE_CHAIN_LOGGED = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
@@ -172,7 +189,10 @@ object SystemUIHeadsetIconHook : HookContext() {
         inRemoteViewsTree: Boolean = false
     ): String? = when {
         text == "当前音频输入输出设备" ->
-            currentDisplayName()
+            // v1.10.2：换名加正向识别+在连双门控，未命中留原文案（见
+            // identifiedDisplayNameOrNull）。v2.10.15 所说「异机型不会被
+            // 写上」只对发布动作成立，兜底读数仍会把别家设备盖成 Free4 名。
+            identifiedDisplayNameOrNull()
         PodProfiles.ALL.any { it.displayName == text } -> {
             logRewriteSignal(text, view)
             val chain = ancestorChain(view)

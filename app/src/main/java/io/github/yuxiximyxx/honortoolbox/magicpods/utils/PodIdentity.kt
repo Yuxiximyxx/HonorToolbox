@@ -45,4 +45,18 @@ object PodIdentity {
         }.getOrNull()
         return PodProfiles.byId(id) ?: PodProfiles.FREE4
     }
+
+    /**
+     * 正向识别查询：只有 Global 里确实发布过、且能映射到已知机型时才返回，
+     * 未发布/认不出返回 null。拦截类路径（合成、改写、下发）必须用它做门控，
+     * 不许拿 [current] 的 Free4 兜底当身份——否则非欢律耳机会被当成 Free4
+     * 接管（v1.10.2 修：AirPods / FreeBuds 5 串扰真机实证）。
+     */
+    fun identified(context: Context? = null): PodProfile? {
+        val ctx = context ?: DeviceIdentity.currentApp() ?: return null
+        val id = runCatching {
+            android.provider.Settings.Global.getString(ctx.contentResolver, MODEL_KEY)
+        }.getOrNull()
+        return PodProfiles.byId(id)
+    }
 }
