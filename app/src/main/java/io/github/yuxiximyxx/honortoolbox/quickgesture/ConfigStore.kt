@@ -88,6 +88,24 @@ import java.io.File
  * 失败（返回 null/抛异常）而非阻塞等工具箱进程起来，
  * 旧日志未留异常痕迹、属推断；本版每枪异常类名落日志，
  * 下轮可定案。
+ *
+ * 宿主本地缓存兜底（v1.10.3，用户导出日志定案）：
+ * v1.10.1–v1.10.2 时段日志显示快服务进程实例呈双稳
+ * 态——约半数实例从启动起 Provider 每次 call 都立即
+ * 抛 IllegalArgumentException（install/warm/seed/决策
+ * 多枪/onResume 二审全灭、终身不恢复），另一半实例
+ * warm 一次成功后一切正常。即通道可用性是进程实例
+ * 级的二值状态，不是时序问题，预热/重试/二审再加码
+ * 也救不回坏实例。故决策不再依赖实时 Provider 读
+ * 取：hook 在快服务进程内用宿主 Context，把每次成
+ * 功读到的完整配置顺手写入宿主私有 SharedPreferences
+ * （[LOCAL_CACHE_PREFS]）——宿主读自己的私有存储永
+ * 远可用，不受 Provider 双稳态影响。[readConfig]
+ * 读序在既有通道与进程内缓存全灭后、返回 null 前再
+ * 查这份本地缓存（来源记 localcache），命中即灌进
+ * 进程内缓存并照常走完决策。Provider attempt 日志
+ * 同步改记异常全文（类名+message），不再只记类名，
+ * 为下一轮取证留证据。缓存只存配置本身。
  */
 data class GestureConfig(
     val enabled: Boolean = false,
@@ -182,7 +200,7 @@ object ConfigStore {
     /**
      * 最近一次 [readConfig] 实际命中的通道："provider" /
      * "global" / "file" / "cache" / "provider(retry)" /
-     * "none"。hook 侧 diag 日志据此留痕。
+     * "localcache" / "none"。hook 侧 diag 日志据此留痕。
      */
     @Volatile
     var lastReadSource: String = "none"
@@ -196,10 +214,55 @@ object ConfigStore {
     @Volatile
     private var lastGoodConfig: GestureConfig? = null
 
-    /** 记下一次成功读取并原样返回（供读序各分支统一收口）。 */
-    private fun remember(config: GestureConfig): GestureConfig {
+    /**
+     * 记下一次成功读取并原样返回（供读序各分支统一
+     * 收口）：刷新进程内缓存；[context] 非空时顺手把
+     * 配置写进宿主本地缓存（v1.10.3，见类注），供本
+     * 进程的后续实例在 Provider 通道整体不可用时兜底。
+     */
+    private fun remember(context: Context?, config: GestureConfig): GestureConfig {
         lastGoodConfig = config
+        if (context != null) saveLocalCache(context, config)
         return config
+    }
+
+    /** 宿主本地缓存（v1.10.3）：宿主私有 SharedPreferences 名与配置键。 */
+    const val LOCAL_CACHE_PREFS = "quickgesture_local_cache"
+    private const val LOCAL_CACHE_KEY_CONFIG = "config"
+
+    /**
+     * 把配置写入宿主私有存储（v1.10.3）：hook 在快服务
+     * 进程内以宿主 Context 写宿主自己的 SharedPreferences，
+     * 不跨进程、不需要任何权限，宿主读自己的私有存储
+     * 永远可用——专为 Provider 通道在部分进程实例里
+     * 整体不可用（双稳态）时兜底。已存文本与新值一致
+     * 时跳过写盘；异常一律吞掉，写缓存失败不影响本次
+     * 判定与返回值。
+     */
+    private fun saveLocalCache(context: Context, config: GestureConfig) {
+        try {
+            val prefs = context.getSharedPreferences(LOCAL_CACHE_PREFS, Context.MODE_PRIVATE)
+            val text = format(config)
+            if (prefs.getString(LOCAL_CACHE_KEY_CONFIG, null) == text) return
+            prefs.edit().putString(LOCAL_CACHE_KEY_CONFIG, text).apply()
+        } catch (t: Throwable) {
+            // 兜底写失败不影响主通道
+        }
+    }
+
+    /**
+     * 读宿主本地缓存（v1.10.3）：文本形如本格式（含
+     * enabled= 行）才解析采用；没存过/损坏/异常一律
+     * 返回 null，由调用方按无缓存处理。
+     */
+    fun readLocalCache(context: Context): GestureConfig? {
+        return try {
+            val text = context.getSharedPreferences(LOCAL_CACHE_PREFS, Context.MODE_PRIVATE)
+                .getString(LOCAL_CACHE_KEY_CONFIG, null)
+            if (!text.isNullOrBlank() && text.contains("enabled=")) parse(text) else null
+        } catch (t: Throwable) {
+            null
+        }
     }
 
     /** 当前缓存（可能为 null）；仅供诊断与测试，不参与读序。 */
@@ -209,8 +272,10 @@ object ConfigStore {
      * hook 侧读取（[context] 非空时）：依次走 Provider →
      * Settings.Global → 文件候选扫描，任一通道读到形如本
      * 格式（含 enabled= 行）的文本即解析采用并刷新缓存；
-     * 三路皆空时回退进程内缓存（来源记 cache），缓存也
-     * 空才返回 null（调用方按未配置放行）。[context] 为
+     * 三路皆空时回退进程内缓存（来源记 cache），进程内
+     * 缓存也空时再查宿主本地缓存（来源记 localcache，
+     * v1.10.3，命中即灌进进程内缓存），仍空才返回 null
+     * （调用方按未配置放行）。[context] 为
      * null 时直接走文件通道（安装时拿不到宿主 Context
      * 的场合）。Provider 查询是同步跨进程调用、只在安装
      * 自检与手势命中时发生，异常一律吞掉回退下一通道，
@@ -221,7 +286,7 @@ object ConfigStore {
             val fromProvider = readConfigFromProvider(context)
             if (fromProvider != null) {
                 lastReadSource = "provider"
-                return remember(fromProvider)
+                return remember(context, fromProvider)
             }
             val fromGlobal = try {
                 Settings.Global.getString(context.contentResolver, GLOBAL_KEY)
@@ -230,25 +295,39 @@ object ConfigStore {
             }
             if (!fromGlobal.isNullOrBlank() && fromGlobal.contains("enabled=")) {
                 lastReadSource = "global"
-                return remember(parse(fromGlobal))
+                return remember(context, parse(fromGlobal))
             }
         }
         val fromFile = readConfigFromFile()
         if (fromFile != null) {
             lastReadSource = "file"
-            return remember(fromFile)
+            return remember(context, fromFile)
         }
         val cached = lastGoodConfig
         if (cached != null) {
             lastReadSource = "cache"
             return cached
         }
+        // v1.10.3 宿主本地缓存兜底：实时通道与进程内
+        // 缓存全灭（如 Provider 双稳态坏实例）时，用
+        // 本进程此前实例落盘在宿主私有存储里的配置
+        // 照常判定；命中即灌进进程内缓存，本进程后
+        // 续手势直接走 cache。
+        if (context != null) {
+            val local = readLocalCache(context)
+            if (local != null) {
+                lastReadSource = "localcache"
+                lastGoodConfig = local
+                return local
+            }
+        }
         lastReadSource = "none"
         return null
     }
 
     /**
-     * 最近一次 Provider 读取失败的异常类名（v1.10.1）：
+     * 最近一次 Provider 读取失败的异常全文（类名 +
+     * message；v1.10.1 只记类名，v1.10.3 起带 message）：
      * readConfigFromProvider 的 catch 里记下，成功即清。
      * 供重试环逐枪打日志——旧版把异常全吞了，冷进程里
      * call 为何失败（快速返回 null 还是抛异常）无从定案，
@@ -266,7 +345,7 @@ object ConfigStore {
      * 试，单枪（v1.8.2 的固定 400ms 后一枪）命中率不
      * 足。枪间睡眠 200/350/550ms 递增，总时长（含调用
      * 耗时）到预算即停；每枪结果经 [onAttempt] 回调出
-     * 去打日志（枪号、已耗时、ok/empty/异常类名）。读
+     * 去打日志（枪号、已耗时、ok/empty/异常全文）。读
      * 到即刷新缓存、来源记 provider(retry)；全灭返回
      * null、来源保持 none。只在手势路径调用（同步阻塞
      * 以预算封顶，调用方给的预算须远低于 ANR 线），安
@@ -287,7 +366,7 @@ object ConfigStore {
             if (config != null) {
                 onAttempt("provider attempt #$attempt @${elapsed}ms: ok")
                 lastReadSource = "provider(retry)"
-                return remember(config)
+                return remember(context, config)
             }
             onAttempt(
                 "provider attempt #$attempt @${elapsed}ms: " +
@@ -325,7 +404,8 @@ object ConfigStore {
                 null
             }
         } catch (t: Throwable) {
-            lastProviderError = t.javaClass.name
+            // v1.10.3：记异常全文（类名 + message），不再只记类名
+            lastProviderError = "${t.javaClass.name}: ${t.message}"
             null
         }
     }

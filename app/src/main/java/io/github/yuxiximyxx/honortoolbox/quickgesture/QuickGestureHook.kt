@@ -65,6 +65,17 @@ import java.io.File
  * 失败时不立刻定案放行，记 pending、由 onResume 二
  * 审一次（预算减半 0.8s）——二审只对「配置读空」触
  * 发，开关关/未配置这类已读到配置的放行不二审。
+ *
+ * 宿主本地缓存兜底（v1.10.3）：用户导出日志定案快
+ * 服务进程实例呈双稳态——约半数实例从启动起
+ * Provider 每次读取都立即抛 IllegalArgumentException，
+ * warm/seed/决策多枪/二审全灭且终身不恢复，预热与
+ * 重试路线救不回。故决策改由 ConfigStore 的宿主本
+ * 地缓存兜底：任一通道读成功顺手把配置落进宿主私
+ * 有存储，实时读取全灭时用缓存配置照常走完决策
+ * （本文件日志记 config from local cache、来源记
+ * localcache），warm 阶段命中缓存即灌进进程内缓
+ * 存。详见 ConfigStore 类注。
  * 诊断写 /sdcard/Download/HonorToolbox/quickgesture.log
  * （v1.6.2 起的主落点；旧路径 /sdcard/Download/
  * quickgesture_probe.log 继续双写）+ LSPosed 日志，前缀
@@ -296,6 +307,15 @@ class QuickGestureHook : IXposedHookLoadPackage {
                                 "mode=${warmed.mode} pkg=${warmed.pkg} " +
                                 "(source=${ConfigStore.lastReadSource})"
                         )
+                        if (ConfigStore.lastReadSource == "localcache") {
+                            // v1.10.3：实时通道全灭、靠宿主本地
+                            // 缓存把进程内缓存灌好，本进程后续
+                            // 手势直接命中缓存。
+                            diag(
+                                "config from local cache: warmed into " +
+                                    "process cache @~${elapsed}ms"
+                            )
+                        }
                         return@Thread
                     }
                 } catch (t: Throwable) {
@@ -407,6 +427,14 @@ class QuickGestureHook : IXposedHookLoadPackage {
             config = ConfigStore.readConfigFromProviderColdStart(
                 activity, coldBudgetMs,
             ) { line -> diag("$source $line") }
+        }
+        if (config != null && ConfigStore.lastReadSource == "localcache") {
+            // v1.10.3：实时通道全灭但宿主本地缓存命中，
+            // 用缓存配置照常走完下面的改向判定。
+            diag(
+                "$source config from local cache: enabled=${config.enabled} " +
+                    "mode=${config.mode} pkg=${config.pkg} act=${config.activity}"
+            )
         }
         if (config == null) {
             if (allowDefer) {

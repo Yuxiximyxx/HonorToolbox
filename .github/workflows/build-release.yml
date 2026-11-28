@@ -48,13 +48,13 @@ jobs:
           mkdir -p dist
           SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
           echo "release apk: $SRC"
-          cp "$SRC" dist/HonorToolbox-1.10.2-release.apk
+          cp "$SRC" dist/HonorToolbox-1.10.3-release.apk
           ls -lh dist
 
       - name: Verify signature
         run: |
           SDK=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.10.2-release.apk
+          "$SDK/apksigner" verify --print-certs dist/HonorToolbox-1.10.3-release.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,46 +66,48 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.10.2
-          name: 荣耀工具箱 1.10.2
+          tag_name: v1.10.3
+          name: 荣耀工具箱 1.10.3
           body: |
-            ## 荣耀工具箱 1.10.2（修 MagicPods 串扰其他耳机）
+            ## 荣耀工具箱 1.10.3（修快服务改向闲置后首击偶发失效）
 
-            ### 本版改动（只动 MagicPods 身份门控，其余功能未动）
+            ### 本版改动（只动 QuickGesture 配置读取，其余功能未动）
 
-            现象（真机实证）：AirPods、HUAWEI FreeBuds 5 连手机时，
-            设备中心展开卡片的噪声控制点了不起作用（更多设置里
-            可以），通知栏耳机通知标题还被误写成「OPPO Enco
-            Free4」；停用工具箱后全部恢复。
+            现象：闲置一段时间后第一次从屏幕底角斜上滑，
+            仍偶发不跳目标应用、直接打开快服务本身，过一
+            会儿又自愈。
 
-            根因：MagicPods 的身份判定有个 Free4 兜底——当前机型
-            没被正向识别时默认当 Free4，这个显示兜底被拦截路径
-            共用了：SmartConnect 查询与设备信息合成对任意设备
-            无条件答成功、卡片降噪下发桥无条件拦截别家设备的
-            点击、通知占位文案无条件换成 Free4 名。非欢律耳机
-            就这样被当成 Free4 接管。
+            定案（用户导出 quickgesture.log 逐行分析）：快
+            服务进程实例呈双稳态——约半数实例从启动起，
+            工具箱 ContentProvider 每次读取都立即抛
+            IllegalArgumentException，预热、决策点多枪重试、
+            onResume 二审全灭且该实例终身不恢复；另一半
+            实例首次读取即成功、之后一切正常。v1.10.1 的
+            预热提前与重试加码都按设计执行了，但通道可用
+            性是进程实例级的二值状态，不是时序问题，重试
+            路线到此为止。
 
-            修法：拦截类路径一律加正向识别门控——
+            修法：决策不再依赖实时 Provider 读取——
 
-            - PodIdentity 新增 identified()：只有机型已被正向
-              识别发布才返回，未识别返回 null；current() 的
-              Free4 兜底只保留给纯显示。
-            - 设备中心 SmartConnect / getDeviceInfo 合成：带
-              MAC 的只在我方 MAC 时合成，无参的只在正向识别
-              命中时合成，其余放行原逻辑。
-            - 卡片降噪下发（setNoiseCtrlMode）：只处理我方
-              MAC 的点击，别家设备放行原 MBB 调用；模式集
-              注入（fromBatteryData）未识别时不注入。
-            - SystemUI 通知占位换名：正向识别命中且我方耳机
-              当前在连才换名，未命中留系统原文案。
+            - 新增宿主本地缓存：hook 在快服务进程内用宿
+              主 Context，把每次成功读到的配置顺手写入
+              快服务自己的私有存储；宿主读自己的私有存
+              储永远可用，不受 Provider 双稳态影响。
+            - 读取顺序：各读取点先按现逻辑读 Provider
+              （保留现有短重试），全失败且本地缓存存在
+              时用缓存配置照常走完决策（日志记 config
+              from local cache）；进程启动预热阶段读到
+              缓存即灌进进程内缓存，后续手势直接命中。
+            - Provider 读取失败的日志改记异常全文（类
+              名 + message），为下一轮取证留证据。
 
-            Free4 被正向识别时，球位 / 卡片 / 电量 / 降噪 / EQ
-            等既有行为不变；欢律协议层零改动。
+            配置语义、默认值、设置界面与改向行为不变；
+            缓存只存配置本身。MagicPods 等其他组件一行
+            未动。
 
-            **复验点**：装 v1.10.2 后重新启用工具箱，分别连
-            AirPods、FreeBuds 5：设备中心展开卡片应能直接切
-            降噪模式，通知栏耳机通知标题应是设备本名；再连
-            Free4，设备中心球位、卡片、电量与降噪应与此前
-            一致。
-
+            **复验点**：装 v1.10.3 后先正常斜滑一次（让
+            缓存落盘），再强停快服务、放置一段时间让进
+            程被回收，第一次底角斜滑应直接跳目标应用、
+            不再先进快服务本身；正常点开快服务图标仍应
+            放行。
           files: dist/*.apk
